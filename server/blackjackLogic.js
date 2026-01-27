@@ -96,7 +96,7 @@ function dealInitialCards(game) {
     game.dealer.hidden = true;
     game.currentPlayerIndex = 0;
     game.status = 'playing';
-    game.readyVotes.clear(); // Reset votes
+    game.readyVotes = new Set(); // Reset votes as Set
 
     game.players.forEach(p => {
         p.hand = [];
@@ -172,6 +172,11 @@ function voteNextHand(game, playerId) {
         return { success: false, error: "Round not over" };
     }
 
+    // Ensure readyVotes is a Set
+    if (!(game.readyVotes instanceof Set)) {
+        game.readyVotes = new Set(game.readyVotes || []);
+    }
+
     game.readyVotes.add(playerId);
 
     const connectedPlayers = game.players.filter(p => p.connected).length;
@@ -193,7 +198,7 @@ function voteNextHand(game, playerId) {
 
 function prepareBettingPhase(game) {
     game.status = 'betting';
-    game.readyVotes.clear();
+    game.readyVotes = new Set();
     game.dealer.hand = [];
     game.dealer.hidden = true;
     game.dealer.score = 0;
@@ -209,36 +214,6 @@ function prepareBettingPhase(game) {
     });
 }
 
-function getPlayerView(game, playerId) {
-    return {
-        ...game,
-        shoe: undefined, // Hide shoe
-        dealer: {
-            ...game.dealer,
-            hand: game.dealer.hidden
-                ? [game.dealer.hand[0], { suit: '?', value: '?' }]
-                : game.dealer.hand
-        },
-        players: game.players.map(p => ({
-            ...p,
-            isMe: p.id === playerId
-        })),
-        readyVotes: Array.from(game.readyVotes) // Convert Set to Array
-    };
-}
-
-module.exports = {
-    createGame,
-    dealInitialCards,
-    hit,
-    stand,
-    voteNextHand,
-    placeBet,
-    begForMoney,
-    getPlayerView,
-    revealDealer,
-    dealerStep
-};
 
 function hit(game, playerId) {
     const player = game.players.find(p => p.id === playerId);
@@ -327,13 +302,8 @@ function dealerStep(game) {
  * Legacy function - kept if needed but we'll use steps now
  */
 function playDealer(game) {
-    const reveal = revealDealer(game);
-    if (reveal.finished) return;
-
-    while (true) {
-        const step = dealerStep(game);
-        if (step.finished) break;
-    }
+    // No-op for async handled in index.js
+    // We just return, index.js observes status = 'dealerTurn' and takes over
 }
 
 function resolveRound(game) {
@@ -396,4 +366,15 @@ function getPlayerView(game, playerId) {
     };
 }
 
-
+module.exports = {
+    createGame,
+    dealInitialCards,
+    hit,
+    stand,
+    voteNextHand,
+    placeBet,
+    begForMoney,
+    getPlayerView,
+    revealDealer,
+    dealerStep
+};

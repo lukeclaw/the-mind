@@ -24,21 +24,7 @@ const allowedOrigins = [clientUrl, 'http://localhost:5173', 'http://127.0.0.1:51
 const io = new Server(server, {
     cors: {
         origin: (origin, callback) => {
-            // Allow requests with no origin (like mobile apps or curl requests)
-            if (!origin) return callback(null, true);
-
-            // Allow any Vercel deployment if you want (easier for previews)
-            if (origin.endsWith('.vercel.app')) {
-                return callback(null, true);
-            }
-
-            if (allowedOrigins.indexOf(origin) !== -1 || origin === clientUrl) {
-                callback(null, true);
-            } else {
-                // Fallback: just allow it for now to fix your issue
-                console.log('Allowing unknown origin:', origin);
-                callback(null, true);
-            }
+            callback(null, true);
         },
         methods: ['GET', 'POST'],
         credentials: true
