@@ -515,6 +515,18 @@ io.on('connection', (socket) => {
                         if (gamePlayer) {
                             gamePlayer.connected = false;
                         }
+                    } else {
+                        // If in Lobby (no game), remove player immediately to prevent "Room Full" ghosts
+                        room.players = room.players.filter(p => p.id !== socket.id);
+
+                        // Notify others that player left lobby
+                        socket.to(currentRoom).emit('playerLeft', { id: socket.id }); // Client handles this? Need to check.
+                        // Actually 'playerJoined' usually sends full list. We should emit updated list.
+                        io.to(currentRoom).emit('playerJoined', { // Re-using playerJoined to sync list
+                            id: null,
+                            name: null,
+                            players: room.players
+                        });
                     }
 
                     io.to(currentRoom).emit('playerDisconnected', {
@@ -523,16 +535,24 @@ io.on('connection', (socket) => {
                     });
                 }
 
-                // If all players disconnected, clean up room after delay
-                const allDisconnected = room.players.every(p => !p.connected);
+                // Clean up logic
+                const allDisconnected = room.players.length === 0 || room.players.every(p => !p.connected);
+
                 if (allDisconnected) {
-                    setTimeout(() => {
-                        const currentPlayerStatus = room.players.every(p => !p.connected);
-                        if (currentPlayerStatus) {
-                            rooms.delete(currentRoom);
-                            console.log(`Room ${currentRoom} deleted (all players left)`);
-                        }
-                    }, 30000); // 30 second grace period
+                    // If lobby is empty, delete immediately
+                    if (!room.game) {
+                        rooms.delete(currentRoom);
+                        console.log(`Room ${currentRoom} deleted (lobby empty)`);
+                    } else {
+                        // If game in progress, wait grace period
+                        setTimeout(() => {
+                            const currentPlayerStatus = room.players.every(p => !p.connected);
+                            if (currentPlayerStatus) {
+                                rooms.delete(currentRoom);
+                                console.log(`Room ${currentRoom} deleted (all players left game)`);
+                            }
+                        }, 30000); // 30 second grace period
+                    }
                 }
             }
         }

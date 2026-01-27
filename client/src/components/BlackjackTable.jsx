@@ -351,48 +351,16 @@ export default function BlackjackTable({
 
             </div>
 
-            {/* Player's Actions */}
-            <div className="player-hand" style={{ flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden' }}>
-                {/* Chips Display */}
-                <div style={{
-                    position: 'absolute',
-                    top: '-20px',
-                    right: '10px',
-                    background: '#f59e0b',
-                    color: '#000',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    fontWeight: 'bold',
-                    fontSize: '0.8rem',
-                    zIndex: 30
-                }}>
-                    Bet: {myPlayer?.currentBet || 0} | Chips: {myPlayer?.chips || 0}
-                </div>
-
-                <div className="text-center mb-sm font-bold">
+            {/* Player's Actions & Hand */}
+            <div className="player-hand" style={{ flexDirection: 'column', gap: '1rem', position: 'absolute', bottom: '100px', left: '50%', transform: 'translateX(-50%)', width: 'auto' }}>
+                <div className="text-center mb-sm font-bold" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
                     You: {myPlayer?.score} ({myPlayer?.status})
                     {myPlayer?.result && ` - ${myPlayer.result.toUpperCase()}`}
                 </div>
 
                 <div className="flex gap-sm justify-center">
+                    {/* Hand */}
                     {myPlayer?.hand.map((card, index) => renderCard(card, index))}
-                </div>
-
-                <div className="flex gap-md mt-md">
-                    <button
-                        className="btn btn-success"
-                        onClick={() => onAction('hit')}
-                        disabled={!isMyTurn}
-                    >
-                        HIT
-                    </button>
-                    <button
-                        className="btn btn-danger"
-                        onClick={() => onAction('stand')}
-                        disabled={!isMyTurn}
-                    >
-                        STAND
-                    </button>
                 </div>
 
                 {/* Result Tint Overlay */}
@@ -418,7 +386,40 @@ export default function BlackjackTable({
                 )}
             </div>
 
-            {/* Leave button */}
+            {/* Player HUD */}
+            <div className="player-hud">
+                <div className="hud-section">
+                    <div className="hud-stat">
+                        <span className="hud-label">Your Balance</span>
+                        <span className="hud-value chips">💰 {myPlayer?.chips}</span>
+                    </div>
+                    <div className="hud-stat">
+                        <span className="hud-label">Current Bet</span>
+                        <span className="hud-value bet">{myPlayer?.currentBet > 0 ? `🎲 ${myPlayer.currentBet}` : '--'}</span>
+                    </div>
+                </div>
+
+                <div className="hud-section">
+                    <button
+                        className="btn btn-success"
+                        onClick={() => onAction('hit')}
+                        disabled={!isMyTurn}
+                        style={{ opacity: isMyTurn ? 1 : 0.5 }}
+                    >
+                        HIT
+                    </button>
+                    <button
+                        className="btn btn-danger"
+                        onClick={() => onAction('stand')}
+                        disabled={!isMyTurn}
+                        style={{ opacity: isMyTurn ? 1 : 0.5 }}
+                    >
+                        STAND
+                    </button>
+                </div>
+            </div>
+
+            {/* Leave button (moved to HUD or kept top right? Keep top right) */}
             <button
                 className="btn btn-secondary btn-small"
                 onClick={onLeave}

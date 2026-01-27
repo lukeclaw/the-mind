@@ -796,8 +796,67 @@ h3 {
   color: var(--color-success);
 }
 
-.end-title.defeat {
-  color: var(--color-danger);
+
+/* ===== Player HUD ===== */
+.player-hud {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: rgba(15, 23, 42, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-2xl);
+  z-index: 40;
+}
+
+.hud-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.hud-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.hud-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hud-value {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.hud-value.chips {
+  color: var(--color-warning);
+}
+
+.hud-value.bet {
+  color: var(--color-accent-primary);
+}
+
+/* Adjust player hand position to be above HUD */
+.player-hand {
+  bottom: 100px;
+  /* moved up */
+  background: transparent;
+  /* remove background since HUD exists */
+  border: none;
+  backdrop-filter: none;
+  padding: 0;
+}
 }
 
 /* ===== Utility Classes ===== */
