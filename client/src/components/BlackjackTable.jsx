@@ -164,7 +164,10 @@ export default function BlackjackTable({
                                 borderRadius: '4px',
                                 fontSize: '0.8rem'
                             }}>{player.name}</span>
-                            <span style={{ fontSize: '0.8rem', color: '#fcd34d' }}>💰 {player.chips}</span>
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '0.8rem' }}>
+                                <span style={{ color: '#fcd34d' }}>💰 {player.chips}</span>
+                                {player.currentBet > 0 && <span style={{ color: '#6366f1' }}>🎲 {player.currentBet}</span>}
+                            </div>
                         </div>
 
                         {/* Cards */}
