@@ -16,6 +16,11 @@ export default function BlackjackTable({
     const dealer = gameState.dealer;
     const isMyTurn = gameState.status === 'playing' && gameState.players[gameState.currentPlayerIndex]?.id === myPlayer?.id && myPlayer?.status === 'playing';
 
+    // Betting State
+    const [selectedBet, setSelectedBet] = useState(100);
+    const [begMessage, setBegMessage] = useState('');
+    const [showBegModal, setShowBegModal] = useState(false);
+
     // Helper to get card value/suit
     const renderCard = (card, index) => {
         // Handle hidden dealer card
@@ -155,6 +160,7 @@ export default function BlackjackTable({
                                 borderRadius: '4px',
                                 fontSize: '0.8rem'
                             }}>{player.name}</span>
+                            <span style={{ fontSize: '0.8rem', color: '#fcd34d' }}>💰 {player.chips}</span>
                         </div>
 
                         {/* Cards */}
@@ -163,8 +169,15 @@ export default function BlackjackTable({
                         </div>
 
                         <div className={`text-center font-bold ${player.status === 'busted' ? 'text-danger' : 'text-muted'}`} style={{ fontSize: '0.9rem' }}>
-                            {player.status === 'playing' ? '' : player.status.toUpperCase()} ({player.score})
+                            {player.status === 'playing' || player.status === 'betting' ? '' : player.status.toUpperCase()} ({player.score})
                         </div>
+
+                        {/* Status Bubbles */}
+                        {player.betReady && gameState.status === 'betting' && (
+                            <div className="status-bubble ready" style={{
+                                background: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '0.7rem'
+                            }}>READY</div>
+                        )}
 
                         {/* Result Overlay for other players */}
                         {(player.status === 'busted' || player.result === 'loss') && (
@@ -188,7 +201,7 @@ export default function BlackjackTable({
                     </div>
                 ))}
 
-                {/* Game Result / Next Round */}
+                {/* Game Result / Next Round Modal */}
                 {gameState.status === 'roundOver' && (
                     <div style={{
                         position: 'absolute',
@@ -219,6 +232,9 @@ export default function BlackjackTable({
                             }}>
                                 You {myPlayer?.result === 'win' ? 'WON' : myPlayer?.status === 'blackjack' ? 'WON (Blackjack!)' : myPlayer?.result === 'push' ? 'PUSHED' : 'LOST'}
                             </div>
+                            <div className="mt-md" style={{ fontSize: '1.2rem', color: '#fcd34d' }}>
+                                New Balance: 💰 {myPlayer?.chips}
+                            </div>
                         </div>
 
                         <div className="flex flex-col gap-sm">
@@ -227,7 +243,7 @@ export default function BlackjackTable({
                                 onClick={onVoteNextHand}
                                 disabled={gameState.readyVotes?.includes(myPlayer?.id)}
                             >
-                                {gameState.readyVotes?.includes(myPlayer?.id) ? 'Waiting for others...' : 'Ready for Next Hand'}
+                                {gameState.readyVotes?.includes(myPlayer?.id) ? 'Waiting for others...' : 'Start Betting'}
                             </button>
 
                             <div className="text-muted text-sm mt-sm">
@@ -237,10 +253,118 @@ export default function BlackjackTable({
                     </div>
                 )}
 
+                {/* Betting Overlay */}
+                {gameState.status === 'betting' && !myPlayer?.betReady && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        padding: '2rem',
+                        borderRadius: '1rem',
+                        textAlign: 'center',
+                        zIndex: 60,
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                        minWidth: '350px'
+                    }}>
+                        <h2 className="mb-md">Place Your Bet</h2>
+                        <div className="text-lg mb-md text-warning">Balance: 💰 {myPlayer?.chips}</div>
+
+                        {myPlayer?.chips === 0 ? (
+                            <div>
+                                <p className="mb-md text-danger">You're broke!</p>
+                                <button className="btn btn-secondary" onClick={() => setShowBegModal(true)}>
+                                    🥺 Beg for Money
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex justify-center gap-sm mb-lg">
+                                    {[10, 50, 100, 500].map(amt => (
+                                        <button
+                                            key={amt}
+                                            className={`btn btn-small ${selectedBet === amt ? 'btn-primary' : 'btn-secondary'}`}
+                                            onClick={() => setSelectedBet(amt)}
+                                            style={{ minWidth: '60px' }}
+                                        >
+                                            {amt}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-md justify-center items-center mb-lg">
+                                    <input
+                                        type="number"
+                                        className="input"
+                                        value={selectedBet}
+                                        onChange={(e) => setSelectedBet(parseInt(e.target.value) || 0)}
+                                        style={{ width: '100px', textAlign: 'center' }}
+                                    />
+                                </div>
+                                <button
+                                    className="btn btn-success w-full"
+                                    onClick={() => onPlaceBet(selectedBet)}
+                                    disabled={selectedBet <= 0 || selectedBet > myPlayer?.chips}
+                                >
+                                    Confirm Bet
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Bankrupt / Beg Modal */}
+                {showBegModal && (
+                    <div className="modal-overlay">
+                        <div className="modal-content">
+                            <h2 className="modal-title">Bankrupt!</h2>
+                            <p className="modal-text">To get more chips, you must admit the truth.</p>
+                            <input
+                                type="text"
+                                className="input mb-md"
+                                placeholder='Type "i suck at gambling"'
+                                value={begMessage}
+                                onChange={(e) => setBegMessage(e.target.value)}
+                            />
+                            <div className="flex gap-md justify-center">
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={() => {
+                                        onBeg(begMessage).then(() => {
+                                            setShowBegModal(false);
+                                            setBegMessage('');
+                                        }).catch(err => console.error(err));
+                                    }}
+                                >
+                                    Submit
+                                </button>
+                                <button className="btn btn-secondary" onClick={() => setShowBegModal(false)}>Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
             </div>
 
             {/* Player's Actions */}
             <div className="player-hand" style={{ flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden' }}>
+                {/* Chips Display */}
+                <div style={{
+                    position: 'absolute',
+                    top: '-20px',
+                    right: '10px',
+                    background: '#f59e0b',
+                    color: '#000',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 'bold',
+                    fontSize: '0.8rem',
+                    zIndex: 30
+                }}>
+                    Bet: {myPlayer?.currentBet || 0} | Chips: {myPlayer?.chips || 0}
+                </div>
+
                 <div className="text-center mb-sm font-bold">
                     You: {myPlayer?.score} ({myPlayer?.status})
                     {myPlayer?.result && ` - ${myPlayer.result.toUpperCase()}`}
