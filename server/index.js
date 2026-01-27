@@ -251,19 +251,65 @@ io.on('connection', (socket) => {
         const startDealerTurn = () => {
             // 1. Reveal Card
             const reveal = blackjackLogic.revealDealer(room.game);
-            broadcastUpdate({ action: 'dealerReveal' });
 
-            if (reveal.finished) return;
+            // If revealed and done immediately (e.g. dealer has 17+ with 2 cards)
+            if (reveal.finished) {
+                // Broadcast the reveal (masked as dealerTurn so no modal yet)
+                room.players.forEach(p => {
+                    const view = blackjackLogic.getPlayerView(room.game, p.id);
+                    view.status = 'dealerTurn'; // Mask status
+                    io.to(p.id).emit('blackjackUpdate', {
+                        gameState: view,
+                        lastAction: { action: 'dealerReveal' }
+                    });
+                });
+
+                // Wait 4s then show results
+                setTimeout(() => {
+                    room.players.forEach(p => {
+                        io.to(p.id).emit('blackjackUpdate', {
+                            gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                            lastAction: { action: 'roundOver' }
+                        });
+                    });
+                }, 4000);
+                return;
+            }
+
+            // Broadcast reveal (still playing)
+            broadcastUpdate({ action: 'dealerReveal' });
 
             // 2. Start Hit Loop with delay
             const dealerLoop = setInterval(() => {
                 const step = blackjackLogic.dealerStep(room.game);
-                broadcastUpdate({ action: 'dealerHit' });
 
                 if (step.finished) {
                     clearInterval(dealerLoop);
+
+                    // Broadcast final card (masked status)
+                    room.players.forEach(p => {
+                        const view = blackjackLogic.getPlayerView(room.game, p.id);
+                        view.status = 'dealerTurn'; // Mask status
+                        io.to(p.id).emit('blackjackUpdate', {
+                            gameState: view,
+                            lastAction: { action: 'dealerHit' }
+                        });
+                    });
+
+                    // Wait 4s then show results
+                    setTimeout(() => {
+                        room.players.forEach(p => {
+                            io.to(p.id).emit('blackjackUpdate', {
+                                gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                                lastAction: { action: 'roundOver' }
+                            });
+                        });
+                    }, 4000);
+
+                } else {
+                    broadcastUpdate({ action: 'dealerHit' });
                 }
-            }, 1200); // 1.2s delay for animation
+            }, 1000); // 1s delay per card
         };
 
         // Broadcast update for the player's action
