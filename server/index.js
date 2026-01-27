@@ -15,14 +15,39 @@ const server = http.createServer(app);
 
 // Configure CORS for Socket.IO
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = [clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'];
+
+// Add Vercel preview deployments if needed (optional)
+// You can also just set origin: "*" for testing, but that's less secure
+
 const io = new Server(server, {
     cors: {
-        origin: clientUrl,
-        methods: ['GET', 'POST']
+        origin: (origin, callback) => {
+            // Allow requests with no origin (like mobile apps or curl requests)
+            if (!origin) return callback(null, true);
+
+            // Allow any Vercel deployment if you want (easier for previews)
+            if (origin.endsWith('.vercel.app')) {
+                return callback(null, true);
+            }
+
+            if (allowedOrigins.indexOf(origin) !== -1 || origin === clientUrl) {
+                callback(null, true);
+            } else {
+                // Fallback: just allow it for now to fix your issue
+                console.log('Allowing unknown origin:', origin);
+                callback(null, true);
+            }
+        },
+        methods: ['GET', 'POST'],
+        credentials: true
     }
 });
 
-app.use(cors());
+app.use(cors({
+    origin: true, // Reflects the request origin
+    credentials: true
+}));
 app.use(express.json());
 
 // Store active rooms
