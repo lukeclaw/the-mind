@@ -23,7 +23,9 @@ function App() {
     voteThrowingStar,
     cancelStarVote,
     blackjackAction,
-    blackjackDeal,
+    blackjackVoteNextHand,
+    blackjackPlaceBet,
+    blackjackBegForMoney,
     clearError,
     leaveGame
   } = useSocket();
@@ -49,7 +51,9 @@ function App() {
         <BlackjackTable
           gameState={gameState}
           onAction={blackjackAction}
-          onDeal={blackjackDeal}
+          onVoteNextHand={blackjackVoteNextHand}
+          onPlaceBet={blackjackPlaceBet}
+          onBeg={blackjackBegForMoney}
           onLeave={leaveGame}
         />
       );

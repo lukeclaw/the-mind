@@ -236,32 +236,115 @@ io.on('connection', (socket) => {
 
         if (!result.success) return callback(result);
 
-        // Broadcast update
-        room.players.forEach(p => {
-            io.to(p.id).emit('blackjackUpdate', {
-                gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                lastAction: { playerId: socket.id, action }
+        // Helper to broadcast updates
+        const broadcastUpdate = (lastAction) => {
+            room.players.forEach(p => {
+                io.to(p.id).emit('blackjackUpdate', {
+                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                    lastAction
+                });
             });
-        });
+        };
+
+        // Helper for async dealer turn
+        const startDealerTurn = () => {
+            // 1. Reveal Card
+            const reveal = blackjackLogic.revealDealer(room.game);
+            broadcastUpdate({ action: 'dealerReveal' });
+
+            if (reveal.finished) return;
+
+            // 2. Start Hit Loop with delay
+            const dealerLoop = setInterval(() => {
+                const step = blackjackLogic.dealerStep(room.game);
+                broadcastUpdate({ action: 'dealerHit' });
+
+                if (step.finished) {
+                    clearInterval(dealerLoop);
+                }
+            }, 1200); // 1.2s delay for animation
+        };
+
+        // Broadcast update for the player's action
+        broadcastUpdate({ playerId: socket.id, action });
+
+        // If turn passed to dealer, start the show
+        if (room.game.status === 'dealerTurn') {
+            startDealerTurn();
+        }
 
         callback({ success: true });
     });
 
-    socket.on('blackjackDeal', (_, callback) => {
-        // Restart round
+    socket.on('blackjackVoteNextHand', (_, callback) => {
         const room = getRoom(currentRoom);
         if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false });
 
-        // Only host or logic to restart? Let's say anyone can deal next hand if round ended
-        if (room.game.status !== 'roundOver') return callback({ success: false, error: "Round not over" });
+        const result = blackjackLogic.voteNextHand(room.game, socket.id);
+        if (!result.success) return callback(result);
 
-        blackjackLogic.dealInitialCards(room.game);
-        room.players.forEach(p => {
-            io.to(p.id).emit('blackjackUpdate', {
-                gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                lastAction: { action: 'deal' }
+        if (result.bettingStarted) {
+            // Betting phase started
+            room.players.forEach(p => {
+                io.to(p.id).emit('blackjackUpdate', {
+                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                    lastAction: { action: 'bettingPhase' }
+                });
             });
+        } else {
+            // Vote registered
+            room.players.forEach(p => {
+                io.to(p.id).emit('blackjackUpdate', {
+                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                    lastAction: { action: 'vote', playerId: socket.id }
+                });
+            });
+        }
+
+        callback({ success: true });
+    });
+
+    socket.on('blackjackPlaceBet', ({ amount }, callback) => {
+        const room = getRoom(currentRoom);
+        if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false, error: 'Invalid game' });
+
+        const result = blackjackLogic.placeBet(room.game, socket.id, amount);
+        if (!result.success) return callback(result);
+
+        if (result.gameStarted) {
+            // Everyone bet, cards dealt
+            // Broadcast deal
+            room.players.forEach(p => {
+                io.to(p.id).emit('blackjackUpdate', {
+                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                    lastAction: { action: 'deal' }
+                });
+            });
+        } else {
+            // Bet placed
+            room.players.forEach(p => {
+                io.to(p.id).emit('blackjackUpdate', {
+                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                    lastAction: { action: 'bet', playerId: socket.id }
+                });
+            });
+        }
+        callback({ success: true });
+    });
+
+    socket.on('blackjackBegForMoney', ({ message }, callback) => {
+        const room = getRoom(currentRoom);
+        if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false, error: 'Invalid game' });
+
+        const result = blackjackLogic.begForMoney(room.game, socket.id, message);
+        if (!result.success) return callback(result);
+
+        // Update view
+        io.to(socket.id).emit('blackjackUpdate', {
+            gameState: blackjackLogic.getPlayerView(room.game, socket.id),
+            lastAction: { action: 'refill' }
         });
+
         callback({ success: true });
     });
 

@@ -237,9 +237,27 @@ export function useSocket() {
         });
     }, []);
 
-    const blackjackDeal = useCallback(() => {
+    const blackjackPlaceBet = useCallback((amount) => {
         return new Promise((resolve, reject) => {
-            socket.emit('blackjackDeal', null, (response) => {
+            socket.emit('blackjackPlaceBet', { amount }, (response) => {
+                if (response.success) resolve(response);
+                else reject(new Error(response.error));
+            });
+        });
+    }, []);
+
+    const blackjackBegForMoney = useCallback((message) => {
+        return new Promise((resolve, reject) => {
+            socket.emit('blackjackBegForMoney', { message }, (response) => {
+                if (response.success) resolve(response);
+                else reject(new Error(response.error));
+            });
+        });
+    }, []);
+
+    const blackjackVoteNextHand = useCallback(() => {
+        return new Promise((resolve, reject) => {
+            socket.emit('blackjackVoteNextHand', null, (response) => {
                 if (response.success) resolve(response);
                 else reject(new Error(response.error));
             });
@@ -276,7 +294,9 @@ export function useSocket() {
         voteThrowingStar,
         cancelStarVote,
         blackjackAction,
-        blackjackDeal,
+        blackjackPlaceBet,
+        blackjackBegForMoney,
+        blackjackVoteNextHand,
         clearError,
         leaveGame
     };
