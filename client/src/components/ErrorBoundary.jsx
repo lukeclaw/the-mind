@@ -22,8 +22,12 @@ class ErrorBoundary extends React.Component {
                     <div className="panel panel-glow">
                         <h2 className="mb-md text-danger">Something went wrong</h2>
                         <p className="mb-lg text-muted">The game encountered a critical error.</p>
-                        <details style={{ whiteSpace: 'pre-wrap', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem' }}>
+                        <details style={{ whiteSpace: 'pre-wrap', textAlign: 'left', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1rem', overflow: 'auto', maxHeight: '300px' }}>
                             {this.state.error && this.state.error.toString()}
+                            <br /><br />
+                            <strong>Stack Trace:</strong>
+                            <br />
+                            {this.state.errorInfo && this.state.errorInfo.componentStack}
                         </details>
                         <button className="btn btn-primary" onClick={() => window.location.reload()}>
                             Reload Game

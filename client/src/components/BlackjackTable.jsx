@@ -23,6 +23,8 @@ export default function BlackjackTable({
 
     // Helper to get card value/suit
     const renderCard = (card, index) => {
+        if (!card) return null; // Safety check
+
         // Handle hidden dealer card
         if (card.value === '?') {
             return <Card key={`hidden-${index}`} value="?" faceUp={false} disabled={true} />;
