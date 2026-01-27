@@ -9,6 +9,8 @@ export default function BlackjackTable({
     gameState,
     onAction, // hit, stand
     onVoteNextHand,
+    onPlaceBet,
+    onBeg,
     onLeave
 }) {
     const myPlayer = gameState.players.find(p => p.isMe);
