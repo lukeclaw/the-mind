@@ -396,10 +396,4 @@ function getPlayerView(game, playerId) {
     };
 }
 
-module.exports = {
-    createGame,
-    dealInitialCards,
-    hit,
-    stand,
-    getPlayerView
-};
+
