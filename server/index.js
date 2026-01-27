@@ -126,7 +126,8 @@ io.on('connection', (socket) => {
             success: true,
             code,
             players: room.players,
-            isHost: true
+            isHost: true,
+            gameType
         });
     });
 
