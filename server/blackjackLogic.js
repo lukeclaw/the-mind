@@ -391,7 +391,8 @@ function getPlayerView(game, playerId) {
         players: game.players.map(p => ({
             ...p,
             isMe: p.id === playerId
-        }))
+        })),
+        readyVotes: Array.from(game.readyVotes || []) // Serialize Set to Array
     };
 }
 
