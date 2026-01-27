@@ -1,0 +1,10 @@
+{
+    "name": "the-mind-root",
+    "private": true,
+    "scripts": {
+        "start": "cd server && npm install && npm start"
+    },
+    "engines": {
+        "node": "20.x"
+    }
+}
