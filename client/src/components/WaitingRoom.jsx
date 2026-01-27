@@ -7,9 +7,10 @@ export default function WaitingRoom({
     isHost,
     onStartGame,
     onLeave,
-    error
+    error,
+    gameType
 }) {
-    const canStart = players.length >= 2 && players.length <= 4;
+    const canStart = players.length >= (gameType === 'blackjack' ? 1 : 2) && players.length <= 4;
 
     const shareUrl = `${window.location.origin}?join=${roomCode}`;
 
@@ -30,7 +31,7 @@ export default function WaitingRoom({
                 </div>
 
                 <div className="room-code-display">
-                    <div className="room-code-label">Room Code</div>
+                    <div className="room-code-label">Room Code ({gameType === 'blackjack' ? 'Blackjack' : 'The Mind'})</div>
                     <div className="room-code">{roomCode}</div>
                     <div className="flex gap-sm justify-center mt-md">
                         <button className="btn btn-secondary btn-small" onClick={copyCode}>
@@ -63,9 +64,9 @@ export default function WaitingRoom({
                     <div className="text-danger text-center mt-md">{error}</div>
                 )}
 
-                {players.length < 2 && (
+                {players.length < (gameType === 'blackjack' ? 1 : 2) && (
                     <p className="waiting-text mt-md">
-                        Waiting for more players... (minimum 2)
+                        Waiting for more players... (minimum {gameType === 'blackjack' ? 1 : 2})
                     </p>
                 )}
 

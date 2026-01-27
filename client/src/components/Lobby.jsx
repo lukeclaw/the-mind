@@ -14,6 +14,7 @@ export default function Lobby({
     const [name, setName] = useState('');
     const [joinCode, setJoinCode] = useState(initialJoinCode || '');
     const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join'
+    const [gameType, setGameType] = useState('the-mind'); // 'the-mind', 'blackjack'
     const [isLoading, setIsLoading] = useState(false);
 
     // Update if initialJoinCode changes
@@ -32,7 +33,7 @@ export default function Lobby({
         onClearError();
 
         try {
-            await onCreateRoom(name.trim());
+            await onCreateRoom(name.trim(), gameType);
         } catch (err) {
             console.error('Failed to create room:', err);
         } finally {
@@ -126,6 +127,28 @@ export default function Lobby({
                     </div>
 
                     <form onSubmit={handleCreateRoom} className="lobby-form">
+                        <div className="input-group">
+                            <label className="input-label">Select Game</label>
+                            <div className="flex gap-md">
+                                <button
+                                    type="button"
+                                    className={`btn ${gameType === 'the-mind' ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setGameType('the-mind')}
+                                    style={{ flex: 1 }}
+                                >
+                                    🧠 The Mind
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`btn ${gameType === 'blackjack' ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setGameType('blackjack')}
+                                    style={{ flex: 1 }}
+                                >
+                                    🎰 Blackjack
+                                </button>
+                            </div>
+                        </div>
+
                         {error && (
                             <div className="text-danger text-center">{error}</div>
                         )}

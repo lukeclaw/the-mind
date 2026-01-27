@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const gameLogic = require('./gameLogic');
+const blackjackLogic = require('./blackjackLogic');
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +83,7 @@ app.get('/api/room/:code', (req, res) => {
         code: room.code,
         playerCount: room.players.length,
         maxPlayers: 4,
+        gameType: room.gameType || 'the-mind',
         status: room.game ? room.game.status : 'lobby'
     });
 });
@@ -96,13 +98,19 @@ io.on('connection', (socket) => {
     /**
      * Create a new room
      */
-    socket.on('createRoom', ({ name }, callback) => {
+    socket.on('createRoom', ({ name, gameType = 'the-mind' }, callback) => {
         const code = generateRoomCode();
         const playerId = socket.id;
+
+        // Check valid game type
+        if (!['the-mind', 'blackjack'].includes(gameType)) {
+            gameType = 'the-mind';
+        }
 
         const room = {
             code,
             host: playerId,
+            gameType,
             players: [{ id: playerId, name, connected: true }],
             game: null
         };
@@ -132,8 +140,11 @@ io.on('connection', (socket) => {
             return callback({ success: false, error: 'Room not found' });
         }
 
-        if (room.game && room.game.status !== 'lobby') {
-            return callback({ success: false, error: 'Game already in progress' });
+        if (room.game && room.game.status !== 'lobby' && room.game.status !== 'waiting') {
+            // Allow joining waiting blackjack game
+            if (room.gameType !== 'blackjack') {
+                return callback({ success: false, error: 'Game already in progress' });
+            }
         }
 
         if (room.players.length >= 4) {
@@ -159,6 +170,7 @@ io.on('connection', (socket) => {
         callback({
             success: true,
             code,
+            gameType: room.gameType,
             players: room.players,
             isHost: room.host === playerId
         });
@@ -178,24 +190,82 @@ io.on('connection', (socket) => {
             return callback({ success: false, error: 'Only host can start game' });
         }
 
-        if (room.players.length < 2) {
+        if (room.gameType === 'the-mind' && room.players.length < 2) {
             return callback({ success: false, error: 'Need at least 2 players' });
         }
 
-        // Create and initialize game
-        room.game = gameLogic.createGame(room.players);
-        gameLogic.dealCards(room.game);
+        if (room.gameType === 'the-mind') {
+            // Create and initialize game
+            room.game = gameLogic.createGame(room.players);
+            gameLogic.dealCards(room.game);
 
-        console.log(`Game started in room ${currentRoom}`);
+            // Send personalized game state to each player
+            room.players.forEach(player => {
+                const playerView = gameLogic.getPlayerView(room.game, player.id);
+                io.to(player.id).emit('gameStarted', playerView);
+            });
+        } else if (room.gameType === 'blackjack') {
+            room.game = blackjackLogic.createGame(room.players);
+            blackjackLogic.dealInitialCards(room.game);
 
-        // Send personalized game state to each player
-        room.players.forEach(player => {
-            const playerView = gameLogic.getPlayerView(room.game, player.id);
-            io.to(player.id).emit('gameStarted', playerView);
+            // Send personalized game state
+            room.players.forEach(player => {
+                const playerView = blackjackLogic.getPlayerView(room.game, player.id);
+                io.to(player.id).emit('gameStarted', playerView);
+            });
+        }
+
+        console.log(`Game (${room.gameType}) started in room ${currentRoom}`);
+        callback({ success: true });
+    });
+
+    // ================= BLACKJACK EVENTS =================
+
+    socket.on('blackjackAction', ({ action }, callback) => {
+        const room = getRoom(currentRoom);
+        if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false, error: 'Invalid game' });
+
+        let result;
+        if (action === 'hit') {
+            result = blackjackLogic.hit(room.game, socket.id);
+        } else if (action === 'stand') {
+            result = blackjackLogic.stand(room.game, socket.id);
+        } else {
+            return callback({ success: false, error: 'Invalid action' });
+        }
+
+        if (!result.success) return callback(result);
+
+        // Broadcast update
+        room.players.forEach(p => {
+            io.to(p.id).emit('blackjackUpdate', {
+                gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                lastAction: { playerId: socket.id, action }
+            });
         });
 
         callback({ success: true });
     });
+
+    socket.on('blackjackDeal', (_, callback) => {
+        // Restart round
+        const room = getRoom(currentRoom);
+        if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false });
+
+        // Only host or logic to restart? Let's say anyone can deal next hand if round ended
+        if (room.game.status !== 'roundOver') return callback({ success: false, error: "Round not over" });
+
+        blackjackLogic.dealInitialCards(room.game);
+        room.players.forEach(p => {
+            io.to(p.id).emit('blackjackUpdate', {
+                gameState: blackjackLogic.getPlayerView(room.game, p.id),
+                lastAction: { action: 'deal' }
+            });
+        });
+        callback({ success: true });
+    });
+
+    // ================= THE MIND EVENTS =================
 
     /**
      * Play a card

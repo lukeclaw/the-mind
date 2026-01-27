@@ -3,6 +3,7 @@ import { useSocket } from './hooks/useSocket';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
 import GameTable from './components/GameTable';
+import BlackjackTable from './components/BlackjackTable';
 import './index.css';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
     roomCode,
     players,
     isHost,
+    gameType,
     gameState,
     error,
     createRoom,
@@ -20,6 +22,8 @@ function App() {
     nextLevel,
     voteThrowingStar,
     cancelStarVote,
+    blackjackAction,
+    blackjackDeal,
     clearError,
     leaveGame
   } = useSocket();
@@ -39,6 +43,17 @@ function App() {
 
   // In active game
   if (gameState && gameState.status !== 'waiting') {
+    if (gameType === 'blackjack') {
+      return (
+        <BlackjackTable
+          gameState={gameState}
+          onAction={blackjackAction}
+          onDeal={blackjackDeal}
+          onLeave={leaveGame}
+        />
+      );
+    }
+
     return (
       <GameTable
         gameState={gameState}
@@ -58,6 +73,7 @@ function App() {
         roomCode={roomCode}
         players={players}
         isHost={isHost}
+        gameType={gameType}
         onStartGame={startGame}
         onLeave={leaveGame}
         error={error}

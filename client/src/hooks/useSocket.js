@@ -9,6 +9,7 @@ export function useSocket() {
     const [roomCode, setRoomCode] = useState(null);
     const [players, setPlayers] = useState([]);
     const [isHost, setIsHost] = useState(false);
+    const [gameType, setGameType] = useState(null);
     const [gameState, setGameState] = useState(null);
     const [error, setError] = useState(null);
 
@@ -97,6 +98,10 @@ export function useSocket() {
             setGameState(newState);
         }
 
+        function onBlackjackUpdate({ gameState: newState }) {
+            setGameState(newState);
+        }
+
         socket.on('playerJoined', onPlayerJoined);
         socket.on('playerDisconnected', onPlayerDisconnected);
         socket.on('gameStarted', onGameStarted);
@@ -107,6 +112,7 @@ export function useSocket() {
         socket.on('victory', onVictory);
         socket.on('starVoteUpdate', onStarVoteUpdate);
         socket.on('throwingStarUsed', onThrowingStarUsed);
+        socket.on('blackjackUpdate', onBlackjackUpdate);
 
         return () => {
             socket.off('playerJoined', onPlayerJoined);
@@ -119,17 +125,19 @@ export function useSocket() {
             socket.off('victory', onVictory);
             socket.off('starVoteUpdate', onStarVoteUpdate);
             socket.off('throwingStarUsed', onThrowingStarUsed);
+            socket.off('blackjackUpdate', onBlackjackUpdate);
         };
     }, [gameState]);
 
     // Actions
-    const createRoom = useCallback((name) => {
+    const createRoom = useCallback((name, gameType = 'the-mind') => {
         return new Promise((resolve, reject) => {
-            socket.emit('createRoom', { name }, (response) => {
+            socket.emit('createRoom', { name, gameType }, (response) => {
                 if (response.success) {
                     setRoomCode(response.code);
                     setPlayers(response.players);
                     setIsHost(true);
+                    setGameType(response.gameType);
                     resolve(response);
                 } else {
                     setError(response.error);
@@ -146,6 +154,7 @@ export function useSocket() {
                     setRoomCode(response.code);
                     setPlayers(response.players);
                     setIsHost(response.isHost);
+                    setGameType(response.gameType);
                     resolve(response);
                 } else {
                     setError(response.error);
@@ -219,6 +228,24 @@ export function useSocket() {
         });
     }, []);
 
+    const blackjackAction = useCallback((action) => {
+        return new Promise((resolve, reject) => {
+            socket.emit('blackjackAction', { action }, (response) => {
+                if (response.success) resolve(response);
+                else reject(new Error(response.error));
+            });
+        });
+    }, []);
+
+    const blackjackDeal = useCallback(() => {
+        return new Promise((resolve, reject) => {
+            socket.emit('blackjackDeal', null, (response) => {
+                if (response.success) resolve(response);
+                else reject(new Error(response.error));
+            });
+        });
+    }, []);
+
     const clearError = useCallback(() => {
         setError(null);
     }, []);
@@ -227,6 +254,7 @@ export function useSocket() {
         setRoomCode(null);
         setPlayers([]);
         setIsHost(false);
+        setGameType(null);
         setGameState(null);
         socket.disconnect();
         socket.connect();
@@ -237,6 +265,7 @@ export function useSocket() {
         roomCode,
         players,
         isHost,
+        gameType,
         gameState,
         error,
         createRoom,
@@ -246,6 +275,8 @@ export function useSocket() {
         nextLevel,
         voteThrowingStar,
         cancelStarVote,
+        blackjackAction,
+        blackjackDeal,
         clearError,
         leaveGame
     };
