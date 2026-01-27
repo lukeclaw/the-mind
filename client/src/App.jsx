@@ -43,7 +43,8 @@ function App() {
 
   // In active game
   if (gameState && gameState.status !== 'waiting') {
-    if (gameType === 'blackjack') {
+    // Robust check: If gameType is 'blackjack' OR gameState structure implies Blackjack (has dealer)
+    if (gameType === 'blackjack' || gameState.dealer) {
       return (
         <BlackjackTable
           gameState={gameState}
