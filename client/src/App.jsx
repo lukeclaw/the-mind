@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { useSocket } from './hooks/useSocket';
 import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
@@ -139,6 +140,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AppContent />
+      <Analytics />
     </ErrorBoundary>
   );
 }
