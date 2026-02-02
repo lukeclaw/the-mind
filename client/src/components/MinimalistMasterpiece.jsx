@@ -215,6 +215,7 @@ export default function MinimalistMasterpiece({ gameState, onSubmitScore, onLeav
     // Canvas Draw Handlers
     const startDrawing = (e) => {
         if (status !== 'playing' || myPlayer.finished) return;
+        if (e.cancelable) e.preventDefault(); // Prevent scroll on touch
 
         const { offsetX, offsetY } = getCoordinates(e);
         setLastPos({ x: offsetX, y: offsetY });
@@ -223,6 +224,7 @@ export default function MinimalistMasterpiece({ gameState, onSubmitScore, onLeav
 
     const draw = (e) => {
         if (!isDrawing || status !== 'playing' || myPlayer.finished) return;
+        if (e.cancelable) e.preventDefault(); // Prevent scroll on touch
 
         const ctx = canvasRef.current.getContext('2d');
         const { offsetX, offsetY } = getCoordinates(e);
@@ -333,7 +335,13 @@ export default function MinimalistMasterpiece({ gameState, onSubmitScore, onLeav
                             ref={canvasRef}
                             width={400}
                             height={400}
-                            style={{ background: 'black', borderRadius: '8px', cursor: 'crosshair', border: '2px solid #555' }}
+                            style={{
+                                background: 'black',
+                                borderRadius: '8px',
+                                cursor: 'crosshair',
+                                border: '2px solid #555',
+                                touchAction: 'none' // CRITICAL for mobile drawing
+                            }}
                             onMouseDown={startDrawing}
                             onMouseMove={draw}
                             onMouseUp={stopDrawing}
