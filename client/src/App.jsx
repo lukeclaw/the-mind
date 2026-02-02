@@ -5,6 +5,7 @@ import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
 import GameTable from './components/GameTable';
 import BlackjackTable from './components/BlackjackTable';
+import MinimalistMasterpiece from './components/MinimalistMasterpiece';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import './index.css';
@@ -29,6 +30,7 @@ function AppContent() {
     blackjackVoteNextHand,
     blackjackPlaceBet,
     blackjackBegForMoney,
+    minimalistSubmitScore,
     clearError,
     leaveGame
   } = useSocket();
@@ -81,6 +83,19 @@ function AppContent() {
             onVoteNextHand={blackjackVoteNextHand}
             onPlaceBet={blackjackPlaceBet}
             onBeg={blackjackBegForMoney}
+            onLeave={leaveGame}
+          />
+        </>
+      );
+    }
+
+    if (gameType === 'minimalist' || gameState.targetWord) {
+      return (
+        <>
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+          <MinimalistMasterpiece
+            gameState={gameState}
+            onSubmitScore={minimalistSubmitScore}
             onLeave={leaveGame}
           />
         </>

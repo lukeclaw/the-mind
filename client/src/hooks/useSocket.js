@@ -112,7 +112,9 @@ export function useSocket() {
         socket.on('victory', onVictory);
         socket.on('starVoteUpdate', onStarVoteUpdate);
         socket.on('throwingStarUsed', onThrowingStarUsed);
+        socket.on('throwingStarUsed', onThrowingStarUsed);
         socket.on('blackjackUpdate', onBlackjackUpdate);
+        socket.on('minimalistUpdate', ({ gameState: newState }) => setGameState(newState));
 
         return () => {
             socket.off('playerJoined', onPlayerJoined);
@@ -125,7 +127,9 @@ export function useSocket() {
             socket.off('victory', onVictory);
             socket.off('starVoteUpdate', onStarVoteUpdate);
             socket.off('throwingStarUsed', onThrowingStarUsed);
+            socket.off('throwingStarUsed', onThrowingStarUsed);
             socket.off('blackjackUpdate', onBlackjackUpdate);
+            socket.off('minimalistUpdate');
         };
     }, [gameState]);
 
@@ -264,6 +268,15 @@ export function useSocket() {
         });
     }, []);
 
+    const minimalistSubmitScore = useCallback((inkUsed) => {
+        return new Promise((resolve, reject) => {
+            socket.emit('minimalistSubmitScore', { inkUsed }, (response) => {
+                if (response.success) resolve(response);
+                else reject(new Error(response.error));
+            });
+        });
+    }, []);
+
     const clearError = useCallback(() => {
         setError(null);
     }, []);
@@ -296,7 +309,9 @@ export function useSocket() {
         blackjackAction,
         blackjackPlaceBet,
         blackjackBegForMoney,
+        blackjackBegForMoney,
         blackjackVoteNextHand,
+        minimalistSubmitScore,
         clearError,
         leaveGame
     };

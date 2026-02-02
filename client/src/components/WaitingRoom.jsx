@@ -10,7 +10,7 @@ export default function WaitingRoom({
     error,
     gameType
 }) {
-    const canStart = players.length >= (gameType === 'blackjack' ? 1 : 2) && players.length <= 4;
+    const canStart = players.length >= (['blackjack', 'minimalist'].includes(gameType) ? 1 : 2) && players.length <= 4;
 
     const shareUrl = `${window.location.origin}?join=${roomCode}`;
 
@@ -31,7 +31,7 @@ export default function WaitingRoom({
                 </div>
 
                 <div className="room-code-display">
-                    <div className="room-code-label">Room Code ({gameType === 'blackjack' ? 'Blackjack' : 'The Mind'})</div>
+                    <div className="room-code-label">Room Code ({gameType === 'blackjack' ? 'Blackjack' : gameType === 'minimalist' ? 'Minimalist' : 'The Mind'})</div>
                     <div className="room-code">{roomCode}</div>
                     <div className="flex gap-sm justify-center mt-md">
                         <button className="btn btn-secondary btn-small" onClick={copyCode}>
@@ -64,9 +64,9 @@ export default function WaitingRoom({
                     <div className="text-danger text-center mt-md">{error}</div>
                 )}
 
-                {players.length < (gameType === 'blackjack' ? 1 : 2) && (
+                {players.length < (['blackjack', 'minimalist'].includes(gameType) ? 1 : 2) && (
                     <p className="waiting-text mt-md">
-                        Waiting for more players... (minimum {gameType === 'blackjack' ? 1 : 2})
+                        Waiting for more players... (minimum {['blackjack', 'minimalist'].includes(gameType) ? 1 : 2})
                     </p>
                 )}
 
@@ -78,7 +78,7 @@ export default function WaitingRoom({
                             disabled={!canStart}
                             style={{ width: '100%' }}
                         >
-                            {canStart ? '🎯 Start Game' : 'Need 2-4 Players'}
+                            {canStart ? '🎯 Start Game' : `Need ${gameType === 'the-mind' ? '2-4' : '1-4'} Players`}
                         </button>
                     </div>
                 ) : (

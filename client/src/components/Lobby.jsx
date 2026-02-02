@@ -14,7 +14,7 @@ export default function Lobby({
     const [name, setName] = useState('');
     const [joinCode, setJoinCode] = useState(initialJoinCode || '');
     const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join'
-    const [gameType, setGameType] = useState('the-mind'); // 'the-mind', 'blackjack'
+    const [gameType, setGameType] = useState('minimalist'); // 'the-mind', 'blackjack', 'minimalist'
     const [isLoading, setIsLoading] = useState(false);
 
     // Update if initialJoinCode changes
@@ -145,6 +145,14 @@ export default function Lobby({
                                     style={{ flex: 1 }}
                                 >
                                     🎰 Blackjack
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`btn ${gameType === 'minimalist' ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setGameType('minimalist')}
+                                    style={{ flex: 1 }}
+                                >
+                                    🎨 Minimalist
                                 </button>
                             </div>
                         </div>

@@ -10,6 +10,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const gameLogic = require('./gameLogic');
 const blackjackLogic = require('./blackjackLogic');
+const minimalistLogic = require('./minimalistLogic');
 
 const app = express();
 const server = http.createServer(app);
@@ -89,7 +90,7 @@ io.on('connection', (socket) => {
         const playerId = socket.id;
 
         // Check valid game type
-        if (!['the-mind', 'blackjack'].includes(gameType)) {
+        if (!['the-mind', 'blackjack', 'minimalist'].includes(gameType)) {
             gameType = 'the-mind';
         }
 
@@ -198,6 +199,19 @@ io.on('connection', (socket) => {
             // Send personalized game state
             room.players.forEach(player => {
                 const playerView = blackjackLogic.getPlayerView(room.game, player.id);
+                io.to(player.id).emit('gameStarted', playerView);
+            });
+        } else if (room.gameType === 'minimalist') {
+            room.game = minimalistLogic.createGame(room.players);
+
+            if (room.players.length === 1) {
+                minimalistLogic.startSandbox(room.game);
+            } else {
+                minimalistLogic.startRound(room.game);
+            }
+
+            room.players.forEach(player => {
+                const playerView = minimalistLogic.getPlayerView(room.game, player.id);
                 io.to(player.id).emit('gameStarted', playerView);
             });
         }
@@ -377,6 +391,70 @@ io.on('connection', (socket) => {
             gameState: blackjackLogic.getPlayerView(room.game, socket.id),
             lastAction: { action: 'refill' }
         });
+
+        callback({ success: true });
+    });
+
+    // ================= MINIMALIST MASTERPIECE EVENTS =================
+
+    socket.on('minimalistSubmitScore', ({ inkUsed }, callback) => {
+        const room = getRoom(currentRoom);
+        if (!room || !room.game || room.gameType !== 'minimalist') return callback({ success: false });
+
+        const result = minimalistLogic.submitScore(room.game, socket.id, inkUsed);
+
+        if (result.success) {
+            // Notify everyone that a player finished
+            room.players.forEach(p => {
+                io.to(p.id).emit('minimalistUpdate', {
+                    gameState: minimalistLogic.getPlayerView(room.game, p.id),
+                    lastAction: { action: 'playerFinished', playerId: socket.id }
+                });
+            });
+
+            if (result.roundOver) {
+                const endResult = minimalistLogic.endRound(room.game);
+
+                // Broadcast round over and rankings
+                room.players.forEach(p => {
+                    io.to(p.id).emit('minimalistUpdate', {
+                        gameState: minimalistLogic.getPlayerView(room.game, p.id),
+                        lastAction: {
+                            action: 'roundOver',
+                            rankings: endResult.rankings
+                        }
+                    });
+                });
+
+                // Auto start next round after delay
+                if (room.game.currentRound < room.game.maxRounds) {
+                    setTimeout(() => {
+                        if (rooms.has(currentRoom)) { // Ensure room still exists
+                            minimalistLogic.startRound(room.game);
+                            room.players.forEach(p => {
+                                io.to(p.id).emit('minimalistUpdate', {
+                                    gameState: minimalistLogic.getPlayerView(room.game, p.id),
+                                    lastAction: { action: 'newRound' }
+                                });
+                            });
+                        }
+                    }, endResult.nextRoundDelay);
+                } else {
+                    // Game Over
+                    setTimeout(() => {
+                        if (rooms.has(currentRoom)) {
+                            room.game.status = 'gameEnded';
+                            room.players.forEach(p => {
+                                io.to(p.id).emit('minimalistUpdate', {
+                                    gameState: minimalistLogic.getPlayerView(room.game, p.id),
+                                    lastAction: { action: 'gameEnded' }
+                                });
+                            });
+                        }
+                    }, endResult.nextRoundDelay);
+                }
+            }
+        }
 
         callback({ success: true });
     });
