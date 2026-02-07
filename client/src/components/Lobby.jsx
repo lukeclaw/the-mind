@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import AiComputeEstimator from './AiComputeEstimator';
 
 /**
  * Lobby component - handles creating/joining rooms
@@ -13,7 +14,7 @@ export default function Lobby({
 }) {
     const [name, setName] = useState('');
     const [joinCode, setJoinCode] = useState(initialJoinCode || '');
-    const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join'
+    const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join', 'estimator'
     const [gameType, setGameType] = useState('minimalist'); // 'the-mind', 'blackjack', 'minimalist', '3d-platform'
     const [isLoading, setIsLoading] = useState(false);
 
@@ -105,10 +106,21 @@ export default function Lobby({
                         >
                             Join with Code
                         </button>
+
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => setMode('estimator')}
+                        >
+                            AI Compute Estimator
+                        </button>
                     </div>
                 </div>
             </div>
         );
+    }
+
+    if (mode === 'estimator') {
+        return <AiComputeEstimator onBack={() => setMode(null)} />;
     }
 
     if (mode === 'create') {
