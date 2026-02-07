@@ -14,10 +14,9 @@ export default function Lobby({
     const [name, setName] = useState('');
     const [joinCode, setJoinCode] = useState(initialJoinCode || '');
     const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join'
-    const [gameType, setGameType] = useState('minimalist'); // 'the-mind', 'blackjack', 'minimalist'
+    const [gameType, setGameType] = useState('minimalist'); // 'the-mind', 'blackjack', 'minimalist', '3d-platform'
     const [isLoading, setIsLoading] = useState(false);
 
-    // Update if initialJoinCode changes
     useEffect(() => {
         if (initialJoinCode) {
             setJoinCode(initialJoinCode);
@@ -57,7 +56,6 @@ export default function Lobby({
         }
     };
 
-    // Main menu
     if (!mode) {
         return (
             <div className="lobby-container">
@@ -81,9 +79,7 @@ export default function Lobby({
                         />
                     </div>
 
-                    {error && (
-                        <div className="text-danger text-center mt-md">{error}</div>
-                    )}
+                    {error && <div className="text-danger text-center mt-md">{error}</div>}
 
                     {!isConnected && (
                         <div className="text-warning text-center mt-md">
@@ -97,7 +93,7 @@ export default function Lobby({
                             onClick={() => name.trim() && setMode('create')}
                             disabled={!isConnected || !name.trim()}
                         >
-                            🎮 Create New Game
+                            Create New Game
                         </button>
 
                         <div className="lobby-divider">or</div>
@@ -107,7 +103,7 @@ export default function Lobby({
                             onClick={() => name.trim() && setMode('join')}
                             disabled={!isConnected || !name.trim()}
                         >
-                            🔗 Join with Code
+                            Join with Code
                         </button>
                     </div>
                 </div>
@@ -115,7 +111,6 @@ export default function Lobby({
         );
     }
 
-    // Create room confirmation
     if (mode === 'create') {
         return (
             <div className="lobby-container">
@@ -129,14 +124,14 @@ export default function Lobby({
                     <form onSubmit={handleCreateRoom} className="lobby-form">
                         <div className="input-group">
                             <label className="input-label">Select Game</label>
-                            <div className="flex gap-md">
+                            <div className="flex gap-md" style={{ flexWrap: 'wrap' }}>
                                 <button
                                     type="button"
                                     className={`btn ${gameType === 'the-mind' ? 'btn-primary' : 'btn-secondary'}`}
                                     onClick={() => setGameType('the-mind')}
                                     style={{ flex: 1 }}
                                 >
-                                    🧠 The Mind
+                                    The Mind
                                 </button>
                                 <button
                                     type="button"
@@ -144,7 +139,7 @@ export default function Lobby({
                                     onClick={() => setGameType('blackjack')}
                                     style={{ flex: 1 }}
                                 >
-                                    🎰 Blackjack
+                                    Blackjack
                                 </button>
                                 <button
                                     type="button"
@@ -152,29 +147,34 @@ export default function Lobby({
                                     onClick={() => setGameType('minimalist')}
                                     style={{ flex: 1 }}
                                 >
-                                    🎨 Minimalist
+                                    Minimalist
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`btn ${gameType === '3d-platform' ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setGameType('3d-platform')}
+                                    style={{ flex: 1 }}
+                                >
+                                    3D Platform
                                 </button>
                             </div>
                         </div>
 
-                        {error && (
-                            <div className="text-danger text-center">{error}</div>
-                        )}
+                        {error && <div className="text-danger text-center">{error}</div>}
 
-                        <button
-                            type="submit"
-                            className="btn btn-primary"
-                            disabled={isLoading}
-                        >
-                            {isLoading ? 'Creating...' : '✨ Create Room'}
+                        <button type="submit" className="btn btn-primary" disabled={isLoading}>
+                            {isLoading ? 'Creating...' : 'Create Room'}
                         </button>
 
                         <button
                             type="button"
                             className="btn btn-secondary"
-                            onClick={() => { setMode(null); onClearError(); }}
+                            onClick={() => {
+                                setMode(null);
+                                onClearError();
+                            }}
                         >
-                            ← Back
+                            Back
                         </button>
                     </form>
                 </div>
@@ -182,7 +182,6 @@ export default function Lobby({
         );
     }
 
-    // Join room form
     if (mode === 'join') {
         return (
             <div className="lobby-container">
@@ -207,24 +206,25 @@ export default function Lobby({
                             />
                         </div>
 
-                        {error && (
-                            <div className="text-danger text-center">{error}</div>
-                        )}
+                        {error && <div className="text-danger text-center">{error}</div>}
 
                         <button
                             type="submit"
                             className="btn btn-primary"
                             disabled={isLoading || joinCode.length !== 6}
                         >
-                            {isLoading ? 'Joining...' : '🚀 Join Room'}
+                            {isLoading ? 'Joining...' : 'Join Room'}
                         </button>
 
                         <button
                             type="button"
                             className="btn btn-secondary"
-                            onClick={() => { setMode(null); onClearError(); }}
+                            onClick={() => {
+                                setMode(null);
+                                onClearError();
+                            }}
                         >
-                            ← Back
+                            Back
                         </button>
                     </form>
                 </div>

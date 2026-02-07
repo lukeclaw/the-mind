@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
         const playerId = socket.id;
 
         // Check valid game type
-        if (!['the-mind', 'blackjack', 'minimalist'].includes(gameType)) {
+        if (!['the-mind', 'blackjack', 'minimalist', '3d-platform'].includes(gameType)) {
             gameType = 'the-mind';
         }
 
@@ -213,6 +213,17 @@ io.on('connection', (socket) => {
             room.players.forEach(player => {
                 const playerView = minimalistLogic.getPlayerView(room.game, player.id);
                 io.to(player.id).emit('gameStarted', playerView);
+            });
+        } else if (room.gameType === '3d-platform') {
+            room.game = {
+                status: 'playing',
+                mode: '3d-platform',
+                players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected })),
+                startedAt: Date.now()
+            };
+
+            room.players.forEach(player => {
+                io.to(player.id).emit('gameStarted', room.game);
             });
         }
 
