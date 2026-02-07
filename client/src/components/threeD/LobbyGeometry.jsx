@@ -2,8 +2,8 @@
  * Pure rendering component for lobby platforms and landmark props.
  * Collision is handled separately via derived colliders.
  */
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useLoader } from '@react-three/fiber';
-import { useMemo } from 'react';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import * as THREE from 'three';
 
@@ -23,19 +23,6 @@ const MODEL_PATHS = [
     '/assets/threeD/models/sci_fi_pillar.obj'
 ];
 
-const PLATFORM_TEXTURE_RULES = {
-    'spawn-plaza': { key: 'techFloor', repeat: [7, 7] },
-    'north-bridge': { key: 'woodPlanks', repeat: [2, 3] },
-    'south-bridge': { key: 'woodPlanks', repeat: [2, 3] },
-    'east-bridge': { key: 'woodPlanks', repeat: [3, 2] },
-    'west-bridge': { key: 'woodPlanks', repeat: [3, 2] },
-    'tower-base': { key: 'stoneTiles', repeat: [3, 3] },
-    'tower-mid': { key: 'stoneTiles', repeat: [2, 2] },
-    'tower-top': { key: 'energyOrbs', repeat: [1, 1] },
-    'secret-vista': { key: 'mossBlock', repeat: [3, 2] }
-};
-
-const BRIDGE_IDS = new Set(['north-bridge', 'south-bridge', 'east-bridge', 'west-bridge']);
 const SURFACE_EPSILON = 0.03;
 
 function prepareTexture(texture, repeatX, repeatY) {
@@ -46,37 +33,109 @@ function prepareTexture(texture, repeatX, repeatY) {
     texture.anisotropy = 8;
 }
 
-function ObjProp({ model, position, rotation = [0, 0, 0], scale = 1, color = '#94a3b8', emissive = '#000000', emissiveIntensity = 0 }) {
-    const object = useMemo(() => {
-        const cloned = model.clone(true);
-        cloned.traverse((child) => {
-            if (!child.isMesh) return;
-            child.castShadow = true;
-            child.receiveShadow = true;
-            child.material = new THREE.MeshStandardMaterial({
-                color,
-                roughness: 0.55,
-                metalness: 0.2,
-                emissive,
-                emissiveIntensity,
-                transparent: false,
-                opacity: 1,
-                depthWrite: true,
-                depthTest: true,
-                side: THREE.DoubleSide
-            });
-        });
-        return cloned;
-    }, [model, color, emissive, emissiveIntensity]);
+function InstancedBoxBatch({ size, instances, materialConfig, texture }) {
+    const meshRef = useRef();
+    const dummy = useMemo(() => new THREE.Object3D(), []);
 
-    return <primitive object={object} position={position} rotation={rotation} scale={scale} />;
+    useLayoutEffect(() => {
+        if (!meshRef.current) return;
+
+        instances.forEach((instance, index) => {
+            dummy.position.set(instance.position[0], instance.position[1], instance.position[2]);
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            meshRef.current.setMatrixAt(index, dummy.matrix);
+        });
+
+        meshRef.current.instanceMatrix.needsUpdate = true;
+    }, [dummy, instances]);
+
+    return (
+        <instancedMesh ref={meshRef} args={[null, null, instances.length]} castShadow receiveShadow>
+            <boxGeometry args={size} />
+            <meshStandardMaterial
+                color={materialConfig.color}
+                roughness={materialConfig.roughness}
+                metalness={materialConfig.metalness}
+                map={texture}
+            />
+        </instancedMesh>
+    );
 }
 
-/**
- * Pure rendering component for lobby platforms and landmark props.
- * Collision is handled separately via derived colliders.
- */
-export default function LobbyGeometry({ platforms }) {
+function InstancedObjBatch({ model, instances, materialConfig }) {
+    const meshRefs = useRef([]);
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+
+    const sourceMeshes = useMemo(() => {
+        model.updateMatrixWorld(true);
+        const meshes = [];
+        model.traverse((child) => {
+            if (child.isMesh) meshes.push(child);
+        });
+        return meshes;
+    }, [model]);
+
+    const transformedGeometries = useMemo(() => {
+        return sourceMeshes.map((mesh) => {
+            const geometry = mesh.geometry.clone();
+            geometry.applyMatrix4(mesh.matrixWorld);
+            return geometry;
+        });
+    }, [sourceMeshes]);
+
+    const material = useMemo(() => {
+        return new THREE.MeshStandardMaterial({
+            color: materialConfig.color,
+            roughness: 0.55,
+            metalness: 0.2,
+            emissive: materialConfig.emissive,
+            emissiveIntensity: materialConfig.emissiveIntensity,
+            transparent: false,
+            opacity: 1,
+            depthWrite: true,
+            depthTest: true,
+            side: THREE.DoubleSide
+        });
+    }, [materialConfig.color, materialConfig.emissive, materialConfig.emissiveIntensity]);
+
+    useLayoutEffect(() => {
+        transformedGeometries.forEach((_, meshIndex) => {
+            const meshRef = meshRefs.current[meshIndex];
+            if (!meshRef) return;
+
+            instances.forEach((instance, instanceIndex) => {
+                const rotation = instance.rotation || [0, 0, 0];
+                dummy.position.set(instance.position[0], instance.position[1], instance.position[2]);
+                dummy.rotation.set(rotation[0], rotation[1], rotation[2]);
+                dummy.scale.setScalar(instance.scale ?? 1);
+                dummy.updateMatrix();
+                meshRef.setMatrixAt(instanceIndex, dummy.matrix);
+            });
+
+            meshRef.instanceMatrix.needsUpdate = true;
+        });
+    }, [dummy, instances, transformedGeometries]);
+
+    return (
+        <>
+            {transformedGeometries.map((geometry, meshIndex) => (
+                <instancedMesh
+                    key={`obj-batch-${meshIndex}`}
+                    ref={(node) => {
+                        meshRefs.current[meshIndex] = node;
+                    }}
+                    args={[geometry, material, instances.length]}
+                    castShadow
+                    receiveShadow
+                />
+            ))}
+        </>
+    );
+}
+
+export default function LobbyGeometry({ platforms, objects }) {
     const [techFloor, stoneTiles, mossBlock, hazardStripes, energyOrbs, woodPlanks] = useLoader(THREE.TextureLoader, TEXTURE_PATHS);
     const [crateModel, benchModel, crystalModel, pillarModel] = useLoader(OBJLoader, MODEL_PATHS);
 
@@ -90,90 +149,125 @@ export default function LobbyGeometry({ platforms }) {
         return { techFloor, stoneTiles, mossBlock, hazardStripes, energyOrbs, woodPlanks };
     }, [techFloor, stoneTiles, mossBlock, hazardStripes, energyOrbs, woodPlanks]);
 
-    const platformTextureMap = useMemo(() => {
-        const variants = {};
+    const modelMap = useMemo(() => ({
+        crate: crateModel,
+        bench: benchModel,
+        crystal: crystalModel,
+        pillar: pillarModel
+    }), [crateModel, benchModel, crystalModel, pillarModel]);
 
-        for (const [platformId, rule] of Object.entries(PLATFORM_TEXTURE_RULES)) {
-            const baseTexture = textures[rule.key];
-            if (!baseTexture) continue;
+    const objectBatches = useMemo(() => {
+        const batches = new Map();
 
-            const variant = baseTexture.clone();
-            prepareTexture(variant, rule.repeat[0], rule.repeat[1]);
-            variants[platformId] = variant;
+        for (const objectDef of objects) {
+            const key = [
+                objectDef.modelKey,
+                objectDef.color || '#94a3b8',
+                objectDef.emissive || '#000000',
+                objectDef.emissiveIntensity || 0
+            ].join('|');
+
+            if (!batches.has(key)) {
+                batches.set(key, {
+                    key,
+                    modelKey: objectDef.modelKey,
+                    materialConfig: {
+                        color: objectDef.color || '#94a3b8',
+                        emissive: objectDef.emissive || '#000000',
+                        emissiveIntensity: objectDef.emissiveIntensity || 0
+                    },
+                    instances: []
+                });
+            }
+
+            batches.get(key).instances.push(objectDef);
         }
 
-        return variants;
-    }, [textures]);
+        return [...batches.values()];
+    }, [objects]);
+
+    const platformBatches = useMemo(() => {
+        const batches = new Map();
+
+        for (const platform of platforms) {
+            const textureKey = platform.textureKey || 'none';
+            const key = `${platform.type}|${textureKey}|${platform.color}`;
+
+            if (!batches.has(key)) {
+                const texture = textureKey !== 'none'
+                    ? textures[textureKey].clone()
+                    : null;
+
+                if (texture && platform.textureRepeat) {
+                    prepareTexture(texture, platform.textureRepeat[0], platform.textureRepeat[1]);
+                }
+
+                batches.set(key, {
+                    key,
+                    size: platform.size,
+                    instances: [],
+                    texture,
+                    materialConfig: {
+                        color: platform.color,
+                        roughness: platform.roughness,
+                        metalness: platform.metalness
+                    }
+                });
+            }
+
+            batches.get(key).instances.push(platform);
+        }
+
+        return [...batches.values()];
+    }, [platforms, textures]);
+
+    const bridgeDecals = useMemo(() => {
+        return platforms.filter((platform) => platform.hazardDecal);
+    }, [platforms]);
 
     return (
         <>
-            {platforms.map((platform) => (
-                <mesh key={platform.id} castShadow receiveShadow position={platform.position}>
-                    <boxGeometry args={platform.size} />
-                    <meshStandardMaterial
-                        color={platform.color}
-                        roughness={0.82}
-                        metalness={0.1}
-                        map={platformTextureMap[platform.id] || null}
-                    />
-                </mesh>
+            {platformBatches.map((batch) => (
+                <InstancedBoxBatch
+                    key={batch.key}
+                    size={batch.size}
+                    instances={batch.instances}
+                    materialConfig={batch.materialConfig}
+                    texture={batch.texture}
+                />
             ))}
 
             <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.2, 0]}>
-                <planeGeometry args={[280, 280]} />
+                <planeGeometry args={[320, 320]} />
                 <meshStandardMaterial color="#0f172a" roughness={1} metalness={0} map={textures.hazardStripes} />
             </mesh>
 
-            <mesh castShadow receiveShadow position={[0, 2.1, -13]}>
-                <boxGeometry args={[5.5, 4.2, 0.8]} />
-                <meshStandardMaterial color="#1e293b" roughness={0.7} metalness={0.12} />
-            </mesh>
-
-            <mesh castShadow receiveShadow position={[-31, 13.2, -20]}>
-                <cylinderGeometry args={[0.8, 1.1, 4, 12]} />
-                <meshStandardMaterial color="#e879f9" emissive="#701a75" emissiveIntensity={0.45} />
-            </mesh>
-
-            <mesh castShadow receiveShadow position={[-27, 6.2, 34]}>
-                <cylinderGeometry args={[0.9, 1.2, 3.2, 12]} />
-                <meshStandardMaterial color="#f59e0b" emissive="#78350f" emissiveIntensity={0.42} />
-            </mesh>
-
-            <mesh castShadow receiveShadow position={[31, 4.9, -4]}>
-                <cylinderGeometry args={[0.75, 1.0, 3, 12]} />
-                <meshStandardMaterial color="#2dd4bf" emissive="#134e4a" emissiveIntensity={0.4} />
-            </mesh>
-
-            <mesh castShadow receiveShadow position={[0, 0.4, 0]}>
-                <cylinderGeometry args={[3.2, 3.8, 0.5, 32]} />
-                <meshStandardMaterial color="#64748b" roughness={0.5} metalness={0.25} />
-            </mesh>
-
-            <ObjProp model={benchModel} position={[0, SURFACE_EPSILON, -6.8]} scale={1.2} color="#7c5a3f" />
-            <ObjProp model={benchModel} position={[0, SURFACE_EPSILON, 6.8]} rotation={[0, Math.PI, 0]} scale={1.2} color="#7c5a3f" />
-
-            <ObjProp model={crateModel} position={[8, SURFACE_EPSILON, 7]} scale={1.1} color="#8b6b47" />
-            <ObjProp model={crateModel} position={[-7.4, SURFACE_EPSILON, 7]} scale={1.1} color="#8b6b47" />
-            <ObjProp model={crateModel} position={[7.8, SURFACE_EPSILON, -7]} scale={0.9} color="#8b6b47" />
-
-            <ObjProp model={pillarModel} position={[29.5, 2.95, -4]} scale={1.2} color="#22d3ee" emissive="#155e75" emissiveIntensity={0.25} />
-            <ObjProp model={pillarModel} position={[-31, 11.8, -20]} scale={1.45} color="#c084fc" emissive="#581c87" emissiveIntensity={0.35} />
-            <ObjProp model={pillarModel} position={[-27, 5.6, 34]} scale={1.2} color="#f59e0b" emissive="#78350f" emissiveIntensity={0.3} />
-
-            <ObjProp model={crystalModel} position={[24.8, 3.95, -10]} scale={1.25} color="#5eead4" emissive="#0f766e" emissiveIntensity={0.28} />
-            <ObjProp model={crystalModel} position={[-30, 6.5, -20]} scale={1.5} color="#d8b4fe" emissive="#7e22ce" emissiveIntensity={0.32} />
-            <ObjProp model={crystalModel} position={[-24.5, 4.85, 33.2]} scale={1.25} color="#fbbf24" emissive="#92400e" emissiveIntensity={0.24} />
-
-            {[...BRIDGE_IDS].map((bridgeId) => {
-                const bridge = platforms.find((platform) => platform.id === bridgeId);
-                if (!bridge) return null;
-
-                const [x, y, z] = bridge.position;
-                const [sx, sy, sz] = bridge.size;
-                const isNorthSouth = bridgeId === 'north-bridge' || bridgeId === 'south-bridge';
+            {objectBatches.map((batch) => {
+                const model = modelMap[batch.modelKey];
+                if (!model) return null;
 
                 return (
-                    <mesh key={`${bridgeId}-decal`} receiveShadow position={[x, y + sy * 0.5 + SURFACE_EPSILON, z]} rotation={[-Math.PI / 2, 0, isNorthSouth ? 0 : Math.PI / 2]}>
+                    <InstancedObjBatch
+                        key={batch.key}
+                        model={model}
+                        instances={batch.instances}
+                        materialConfig={batch.materialConfig}
+                    />
+                );
+            })}
+
+            {bridgeDecals.map((platform) => {
+                const [x, y, z] = platform.position;
+                const [sx, sy, sz] = platform.size;
+                const isNorthSouth = platform.hazardOrientation === 'ns';
+
+                return (
+                    <mesh
+                        key={`${platform.id}-decal`}
+                        receiveShadow
+                        position={[x, y + sy * 0.5 + SURFACE_EPSILON, z]}
+                        rotation={[-Math.PI / 2, 0, isNorthSouth ? 0 : Math.PI / 2]}
+                    >
                         <planeGeometry args={[isNorthSouth ? sx * 0.85 : sz * 0.85, isNorthSouth ? sz * 0.85 : sx * 0.85]} />
                         <meshStandardMaterial
                             map={textures.hazardStripes}

@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Sky } from '@react-three/drei';
+import { Sky, Stats } from '@react-three/drei';
 import CharacterController from './threeD/CharacterController';
 import LobbyGeometry from './threeD/LobbyGeometry';
-import { LOBBY_OBJECT_COLLIDERS, LOBBY_PLATFORMS, PLATFORM_COLLIDERS } from './threeD/levelData';
+import { LOBBY_OBJECT_COLLIDERS, LOBBY_OBJECTS, LOBBY_PLATFORMS, PLATFORM_COLLIDERS } from './threeD/levelData';
 
 export default function ThreeDPlatformer({ onLeave, playerName = 'Player' }) {
     const colliders = useMemo(() => [...PLATFORM_COLLIDERS, ...LOBBY_OBJECT_COLLIDERS], []);
@@ -24,8 +24,9 @@ export default function ThreeDPlatformer({ onLeave, playerName = 'Player' }) {
                 />
 
                 <Sky distance={450000} sunPosition={[5, 1, 8]} inclination={0.5} azimuth={0.2} />
+                <Stats showPanel={0} />
 
-                <LobbyGeometry platforms={LOBBY_PLATFORMS} />
+                <LobbyGeometry platforms={LOBBY_PLATFORMS} objects={LOBBY_OBJECTS} />
                 <CharacterController playerName={playerName} colliders={colliders} />
             </Canvas>
 
