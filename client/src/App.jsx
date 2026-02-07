@@ -6,6 +6,7 @@ import WaitingRoom from './components/WaitingRoom';
 import GameTable from './components/GameTable';
 import BlackjackTable from './components/BlackjackTable';
 import MinimalistMasterpiece from './components/MinimalistMasterpiece';
+import ThreeDPlatformer from './components/ThreeDPlatformer';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastContainer from './components/ToastContainer';
 import './index.css';
@@ -97,6 +98,18 @@ function AppContent() {
             gameState={gameState}
             onSubmitScore={minimalistSubmitScore}
             onLeave={leaveGame}
+          />
+        </>
+      );
+    }
+
+    if (gameType === '3d-platform' || gameState.mode === '3d-platform') {
+      return (
+        <>
+          <ToastContainer toasts={toasts} removeToast={removeToast} />
+          <ThreeDPlatformer
+            onLeave={leaveGame}
+            playerName={players[0]?.name || 'Player'}
           />
         </>
       );
