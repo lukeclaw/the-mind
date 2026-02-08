@@ -250,7 +250,10 @@ function updateTurn(game) {
     // Find next player who is 'playing'
     while (
         game.currentPlayerIndex < game.players.length &&
-        ['busted', 'standing', 'blackjack'].includes(game.players[game.currentPlayerIndex].status)
+        (
+            !game.players[game.currentPlayerIndex].connected ||
+            ['busted', 'standing', 'blackjack'].includes(game.players[game.currentPlayerIndex].status)
+        )
     ) {
         game.currentPlayerIndex++;
     }
@@ -366,6 +369,53 @@ function getPlayerView(game, playerId) {
     };
 }
 
+function reconnectPlayer(game, previousPlayerId, newPlayerId) {
+    const player = game.players.find(p => p.id === previousPlayerId);
+    if (!player) return { success: false, error: 'Player not found' };
+
+    player.id = newPlayerId;
+    player.connected = true;
+
+    if (game.readyVotes instanceof Set && game.readyVotes.has(previousPlayerId)) {
+        game.readyVotes.delete(previousPlayerId);
+        game.readyVotes.add(newPlayerId);
+    }
+
+    return { success: true };
+}
+
+function handlePlayerDisconnect(game, playerId) {
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) return { success: false };
+
+    const previousStatus = game.status;
+    const wasCurrentTurn = game.status === 'playing' && game.players[game.currentPlayerIndex]?.id === playerId;
+
+    player.connected = false;
+
+    if (game.readyVotes instanceof Set) {
+        game.readyVotes.delete(playerId);
+    }
+
+    if (game.status === 'betting') {
+        player.betReady = false;
+        player.currentBet = 0;
+    }
+
+    if (game.status === 'playing' && player.status === 'playing') {
+        player.status = 'standing';
+    }
+
+    if (game.status === 'playing' && (wasCurrentTurn || player.status === 'standing')) {
+        updateTurn(game);
+    }
+
+    return {
+        success: true,
+        transitionedToDealerTurn: previousStatus !== 'dealerTurn' && game.status === 'dealerTurn'
+    };
+}
+
 module.exports = {
     createGame,
     dealInitialCards,
@@ -376,5 +426,7 @@ module.exports = {
     begForMoney,
     getPlayerView,
     revealDealer,
-    dealerStep
+    dealerStep,
+    reconnectPlayer,
+    handlePlayerDisconnect
 };

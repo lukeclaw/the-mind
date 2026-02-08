@@ -54,10 +54,25 @@ function generateRoomCode() {
 }
 
 /**
+ * Normalize user-provided display names so client rendering stays stable.
+ */
+function sanitizePlayerName(rawName) {
+    if (typeof rawName !== 'string') return '';
+    return rawName.trim().replace(/\s+/g, ' ').slice(0, 20);
+}
+
+function sanitizeRoomCode(rawCode) {
+    if (typeof rawCode !== 'string') return '';
+    return rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+}
+
+/**
  * Get room by code
  */
 function getRoom(code) {
-    return rooms.get(code.toUpperCase());
+    const normalizedCode = sanitizeRoomCode(code);
+    if (!normalizedCode) return null;
+    return rooms.get(normalizedCode);
 }
 
 // REST endpoint to check room status
@@ -82,10 +97,79 @@ io.on('connection', (socket) => {
     let currentRoom = null;
     let playerName = null;
 
+    function emitPlayerList(room) {
+        io.to(room.code).emit('playerJoined', {
+            id: null,
+            name: null,
+            players: room.players
+        });
+    }
+
+    function transferHostIfNeeded(room, previousHostId) {
+        if (room.host !== previousHostId) return;
+        const nextHost = room.players.find(p => p.connected) || room.players[0];
+        if (!nextHost) return;
+        room.host = nextHost.id;
+        io.to(room.code).emit('hostChanged', { hostId: room.host });
+    }
+
+    function broadcastBlackjackUpdate(room, lastAction, options = {}) {
+        const { maskDealerTurnStatus = false } = options;
+        room.players
+            .filter(p => p.connected)
+            .forEach((p) => {
+                const view = blackjackLogic.getPlayerView(room.game, p.id);
+                if (maskDealerTurnStatus) {
+                    view.status = 'dealerTurn';
+                }
+                io.to(p.id).emit('blackjackUpdate', { gameState: view, lastAction });
+            });
+    }
+
+    function startBlackjackDealerTurn(room) {
+        if (!room?.game || room.gameType !== 'blackjack' || room.game.status !== 'dealerTurn') {
+            return;
+        }
+        if (room.blackjackDealerTurnRunning) return;
+        room.blackjackDealerTurnRunning = true;
+
+        const reveal = blackjackLogic.revealDealer(room.game);
+
+        if (reveal.finished) {
+            broadcastBlackjackUpdate(room, { action: 'dealerReveal' }, { maskDealerTurnStatus: true });
+            setTimeout(() => {
+                room.blackjackDealerTurnRunning = false;
+                broadcastBlackjackUpdate(room, { action: 'roundOver' });
+            }, 4000);
+            return;
+        }
+
+        broadcastBlackjackUpdate(room, { action: 'dealerReveal' });
+
+        const dealerLoop = setInterval(() => {
+            const step = blackjackLogic.dealerStep(room.game);
+            if (step.finished) {
+                clearInterval(dealerLoop);
+                broadcastBlackjackUpdate(room, { action: 'dealerHit' }, { maskDealerTurnStatus: true });
+                setTimeout(() => {
+                    room.blackjackDealerTurnRunning = false;
+                    broadcastBlackjackUpdate(room, { action: 'roundOver' });
+                }, 4000);
+            } else {
+                broadcastBlackjackUpdate(room, { action: 'dealerHit' });
+            }
+        }, 1000);
+    }
+
     /**
      * Create a new room
      */
     socket.on('createRoom', ({ name, gameType = 'the-mind' }, callback) => {
+        const sanitizedName = sanitizePlayerName(name);
+        if (!sanitizedName) {
+            return callback({ success: false, error: 'Name is required' });
+        }
+
         const code = generateRoomCode();
         const playerId = socket.id;
 
@@ -98,16 +182,16 @@ io.on('connection', (socket) => {
             code,
             host: playerId,
             gameType,
-            players: [{ id: playerId, name, connected: true }],
+            players: [{ id: playerId, name: sanitizedName, connected: true }],
             game: null
         };
 
         rooms.set(code, room);
         socket.join(code);
         currentRoom = code;
-        playerName = name;
+        playerName = sanitizedName;
 
-        console.log(`Room ${code} created by ${name}`);
+        console.log(`Room ${code} created by ${sanitizedName}`);
 
         callback({
             success: true,
@@ -122,46 +206,93 @@ io.on('connection', (socket) => {
      * Join an existing room
      */
     socket.on('joinRoom', ({ code, name }, callback) => {
-        const room = getRoom(code);
+        const sanitizedName = sanitizePlayerName(name);
+        if (!sanitizedName) {
+            return callback({ success: false, error: 'Name is required to join a room' });
+        }
+        const sanitizedCode = sanitizeRoomCode(code);
+        if (!sanitizedCode || sanitizedCode.length !== 6) {
+            return callback({ success: false, error: 'Invalid room code' });
+        }
+
+        const room = getRoom(sanitizedCode);
 
         if (!room) {
             return callback({ success: false, error: 'Room not found' });
         }
 
-        if (room.game && room.game.status !== 'lobby' && room.game.status !== 'waiting') {
-            // Allow joining waiting blackjack game
-            if (room.gameType !== 'blackjack') {
-                return callback({ success: false, error: 'Game already in progress' });
+        const normalizedName = sanitizedName.toLowerCase();
+        const reconnectingPlayer = room.players.find(
+            (p) => !p.connected && p.name.toLowerCase() === normalizedName
+        );
+        const isGameInProgress = !!(room.game && room.game.status !== 'lobby' && room.game.status !== 'waiting');
+
+        if (isGameInProgress && !reconnectingPlayer) {
+            return callback({ success: false, error: 'Game already in progress' });
+        }
+
+        if (!reconnectingPlayer) {
+            const connectedCount = room.players.filter(p => p.connected).length;
+            if (connectedCount >= 4) {
+                return callback({ success: false, error: 'Room is full (max 4 players)' });
             }
         }
 
-        if (room.players.length >= 4) {
-            return callback({ success: false, error: 'Room is full (max 4 players)' });
+        const playerId = socket.id;
+        if (reconnectingPlayer) {
+            const previousPlayerId = reconnectingPlayer.id;
+            reconnectingPlayer.id = playerId;
+            reconnectingPlayer.connected = true;
+
+            if (room.host === previousPlayerId) {
+                room.host = playerId;
+            }
+
+            if (room.game) {
+                if (room.gameType === 'blackjack') {
+                    blackjackLogic.reconnectPlayer(room.game, previousPlayerId, playerId);
+                } else {
+                    const gamePlayer = room.game.players.find(p => p.id === previousPlayerId);
+                    if (gamePlayer) {
+                        gamePlayer.id = playerId;
+                        gamePlayer.connected = true;
+                        gamePlayer.name = reconnectingPlayer.name;
+                    }
+                }
+            }
+        } else {
+            room.players.push({ id: playerId, name: sanitizedName, connected: true });
         }
 
-        const playerId = socket.id;
-        room.players.push({ id: playerId, name, connected: true });
+        socket.join(sanitizedCode);
+        currentRoom = sanitizedCode;
+        playerName = sanitizedName;
 
-        socket.join(code);
-        currentRoom = code;
-        playerName = name;
-
-        console.log(`${name} joined room ${code}`);
+        console.log(`${sanitizedName} joined room ${sanitizedCode}`);
 
         // Notify other players
-        socket.to(code).emit('playerJoined', {
-            id: playerId,
-            name,
-            players: room.players
-        });
+        emitPlayerList(room);
+        io.to(sanitizedCode).emit('hostChanged', { hostId: room.host });
 
         callback({
             success: true,
-            code,
+            code: sanitizedCode,
             gameType: room.gameType,
             players: room.players,
             isHost: room.host === playerId
         });
+
+        if (room.game) {
+            if (room.gameType === 'blackjack') {
+                io.to(playerId).emit('gameStarted', blackjackLogic.getPlayerView(room.game, playerId));
+            } else if (room.gameType === 'minimalist') {
+                io.to(playerId).emit('gameStarted', minimalistLogic.getPlayerView(room.game, playerId));
+            } else if (room.gameType === 'the-mind') {
+                io.to(playerId).emit('gameStarted', gameLogic.getPlayerView(room.game, playerId));
+            } else if (room.gameType === '3d-platform') {
+                io.to(playerId).emit('gameStarted', room.game);
+            }
+        }
     });
 
     /**
@@ -248,87 +379,12 @@ io.on('connection', (socket) => {
 
         if (!result.success) return callback(result);
 
-        // Helper to broadcast updates
-        const broadcastUpdate = (lastAction) => {
-            room.players.forEach(p => {
-                io.to(p.id).emit('blackjackUpdate', {
-                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                    lastAction
-                });
-            });
-        };
-
-        // Helper for async dealer turn
-        const startDealerTurn = () => {
-            // 1. Reveal Card
-            const reveal = blackjackLogic.revealDealer(room.game);
-
-            // If revealed and done immediately (e.g. dealer has 17+ with 2 cards)
-            if (reveal.finished) {
-                // Broadcast the reveal (masked as dealerTurn so no modal yet)
-                room.players.forEach(p => {
-                    const view = blackjackLogic.getPlayerView(room.game, p.id);
-                    view.status = 'dealerTurn'; // Mask status
-                    io.to(p.id).emit('blackjackUpdate', {
-                        gameState: view,
-                        lastAction: { action: 'dealerReveal' }
-                    });
-                });
-
-                // Wait 4s then show results
-                setTimeout(() => {
-                    room.players.forEach(p => {
-                        io.to(p.id).emit('blackjackUpdate', {
-                            gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                            lastAction: { action: 'roundOver' }
-                        });
-                    });
-                }, 4000);
-                return;
-            }
-
-            // Broadcast reveal (still playing)
-            broadcastUpdate({ action: 'dealerReveal' });
-
-            // 2. Start Hit Loop with delay
-            const dealerLoop = setInterval(() => {
-                const step = blackjackLogic.dealerStep(room.game);
-
-                if (step.finished) {
-                    clearInterval(dealerLoop);
-
-                    // Broadcast final card (masked status)
-                    room.players.forEach(p => {
-                        const view = blackjackLogic.getPlayerView(room.game, p.id);
-                        view.status = 'dealerTurn'; // Mask status
-                        io.to(p.id).emit('blackjackUpdate', {
-                            gameState: view,
-                            lastAction: { action: 'dealerHit' }
-                        });
-                    });
-
-                    // Wait 4s then show results
-                    setTimeout(() => {
-                        room.players.forEach(p => {
-                            io.to(p.id).emit('blackjackUpdate', {
-                                gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                                lastAction: { action: 'roundOver' }
-                            });
-                        });
-                    }, 4000);
-
-                } else {
-                    broadcastUpdate({ action: 'dealerHit' });
-                }
-            }, 1000); // 1s delay per card
-        };
-
         // Broadcast update for the player's action
-        broadcastUpdate({ playerId: socket.id, action });
+        broadcastBlackjackUpdate(room, { playerId: socket.id, action });
 
         // If turn passed to dealer, start the show
         if (room.game.status === 'dealerTurn') {
-            startDealerTurn();
+            startBlackjackDealerTurn(room);
         }
 
         callback({ success: true });
@@ -343,20 +399,10 @@ io.on('connection', (socket) => {
 
         if (result.bettingStarted) {
             // Betting phase started
-            room.players.forEach(p => {
-                io.to(p.id).emit('blackjackUpdate', {
-                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                    lastAction: { action: 'bettingPhase' }
-                });
-            });
+            broadcastBlackjackUpdate(room, { action: 'bettingPhase' });
         } else {
             // Vote registered
-            room.players.forEach(p => {
-                io.to(p.id).emit('blackjackUpdate', {
-                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                    lastAction: { action: 'vote', playerId: socket.id }
-                });
-            });
+            broadcastBlackjackUpdate(room, { action: 'vote', playerId: socket.id });
         }
 
         callback({ success: true });
@@ -371,21 +417,10 @@ io.on('connection', (socket) => {
 
         if (result.gameStarted) {
             // Everyone bet, cards dealt
-            // Broadcast deal
-            room.players.forEach(p => {
-                io.to(p.id).emit('blackjackUpdate', {
-                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                    lastAction: { action: 'deal' }
-                });
-            });
+            broadcastBlackjackUpdate(room, { action: 'deal' });
         } else {
             // Bet placed
-            room.players.forEach(p => {
-                io.to(p.id).emit('blackjackUpdate', {
-                    gameState: blackjackLogic.getPlayerView(room.game, p.id),
-                    lastAction: { action: 'bet', playerId: socket.id }
-                });
-            });
+            broadcastBlackjackUpdate(room, { action: 'bet', playerId: socket.id });
         }
         callback({ success: true });
     });
@@ -625,30 +660,32 @@ io.on('connection', (socket) => {
         if (currentRoom) {
             const room = getRoom(currentRoom);
             if (room) {
-                // Mark player as disconnected
                 const player = room.players.find(p => p.id === socket.id);
                 if (player) {
-                    player.connected = false;
+                    const previousHostId = room.host;
 
-                    // Update game state if in progress
                     if (room.game) {
-                        const gamePlayer = room.game.players.find(p => p.id === socket.id);
-                        if (gamePlayer) {
-                            gamePlayer.connected = false;
+                        player.connected = false;
+
+                        if (room.gameType === 'blackjack') {
+                            const disconnectResult = blackjackLogic.handlePlayerDisconnect(room.game, socket.id);
+                            if (disconnectResult.transitionedToDealerTurn) {
+                                startBlackjackDealerTurn(room);
+                            }
+                            broadcastBlackjackUpdate(room, { action: 'playerDisconnected', playerId: socket.id });
+                        } else {
+                            const gamePlayer = room.game.players.find(p => p.id === socket.id);
+                            if (gamePlayer) {
+                                gamePlayer.connected = false;
+                            }
                         }
                     } else {
-                        // If in Lobby (no game), remove player immediately to prevent "Room Full" ghosts
                         room.players = room.players.filter(p => p.id !== socket.id);
-
-                        // Notify others that player left lobby
-                        socket.to(currentRoom).emit('playerLeft', { id: socket.id }); // Client handles this? Need to check.
-                        // Actually 'playerJoined' usually sends full list. We should emit updated list.
-                        io.to(currentRoom).emit('playerJoined', { // Re-using playerJoined to sync list
-                            id: null,
-                            name: null,
-                            players: room.players
-                        });
+                        transferHostIfNeeded(room, previousHostId);
+                        emitPlayerList(room);
                     }
+
+                    transferHostIfNeeded(room, previousHostId);
 
                     io.to(currentRoom).emit('playerDisconnected', {
                         id: socket.id,
