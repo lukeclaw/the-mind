@@ -48,6 +48,10 @@ export function useSocket() {
             setPlayers(updatedPlayers);
         }
 
+        function onHostChanged({ hostId }) {
+            setIsHost(hostId === socket.id);
+        }
+
         function onPlayerDisconnected({ id }) {
             setPlayers(prev =>
                 prev.map(p => p.id === id ? { ...p, connected: false } : p)
@@ -74,7 +78,7 @@ export function useSocket() {
             setGameState(state);
         }
 
-        function onLevelComplete({ level }) {
+        function onLevelComplete() {
             setGameState(prev => ({ ...prev, status: 'levelComplete' }));
         }
 
@@ -86,7 +90,7 @@ export function useSocket() {
             setGameState(prev => ({ ...prev, status: 'victory' }));
         }
 
-        function onStarVoteUpdate({ votes, needed, voters }) {
+        function onStarVoteUpdate({ needed, voters }) {
             setGameState(prev => ({
                 ...prev,
                 starVotes: voters,
@@ -103,6 +107,7 @@ export function useSocket() {
         }
 
         socket.on('playerJoined', onPlayerJoined);
+        socket.on('hostChanged', onHostChanged);
         socket.on('playerDisconnected', onPlayerDisconnected);
         socket.on('gameStarted', onGameStarted);
         socket.on('cardPlayed', onCardPlayed);
@@ -118,6 +123,7 @@ export function useSocket() {
 
         return () => {
             socket.off('playerJoined', onPlayerJoined);
+            socket.off('hostChanged', onHostChanged);
             socket.off('playerDisconnected', onPlayerDisconnected);
             socket.off('gameStarted', onGameStarted);
             socket.off('cardPlayed', onCardPlayed);
@@ -308,7 +314,6 @@ export function useSocket() {
         cancelStarVote,
         blackjackAction,
         blackjackPlaceBet,
-        blackjackBegForMoney,
         blackjackBegForMoney,
         blackjackVoteNextHand,
         minimalistSubmitScore,

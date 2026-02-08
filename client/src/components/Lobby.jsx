@@ -16,23 +16,34 @@ export default function Lobby({
     const [mode, setMode] = useState(initialJoinCode ? 'join' : null); // null, 'create', 'join'
     const [gameType, setGameType] = useState('minimalist'); // 'the-mind', 'blackjack', 'minimalist', '3d-platform'
     const [isLoading, setIsLoading] = useState(false);
+    const normalizedName = name.trim();
+    const normalizedJoinCode = joinCode.trim().toUpperCase();
+    const canJoinRoom = !!normalizedName && /^[A-Z0-9]{6}$/.test(normalizedJoinCode);
+
+    useEffect(() => {
+        const savedName = window.localStorage.getItem('playerName');
+        if (savedName) {
+            setName(savedName);
+        }
+    }, []);
 
     useEffect(() => {
         if (initialJoinCode) {
-            setJoinCode(initialJoinCode);
+            setJoinCode(initialJoinCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6));
             setMode('join');
         }
     }, [initialJoinCode]);
 
     const handleCreateRoom = async (e) => {
         e.preventDefault();
-        if (!name.trim()) return;
+        if (!normalizedName) return;
 
         setIsLoading(true);
         onClearError();
 
         try {
-            await onCreateRoom(name.trim(), gameType);
+            window.localStorage.setItem('playerName', normalizedName);
+            await onCreateRoom(normalizedName, gameType);
         } catch (err) {
             console.error('Failed to create room:', err);
         } finally {
@@ -42,13 +53,14 @@ export default function Lobby({
 
     const handleJoinRoom = async (e) => {
         e.preventDefault();
-        if (!name.trim() || !joinCode.trim()) return;
+        if (!canJoinRoom) return;
 
         setIsLoading(true);
         onClearError();
 
         try {
-            await onJoinRoom(joinCode.trim().toUpperCase(), name.trim());
+            window.localStorage.setItem('playerName', normalizedName);
+            await onJoinRoom(normalizedJoinCode, normalizedName);
         } catch (err) {
             console.error('Failed to join room:', err);
         } finally {
@@ -90,8 +102,8 @@ export default function Lobby({
                     <div className="lobby-form mt-lg">
                         <button
                             className="btn btn-primary"
-                            onClick={() => name.trim() && setMode('create')}
-                            disabled={!isConnected || !name.trim()}
+                            onClick={() => normalizedName && setMode('create')}
+                            disabled={!isConnected || !normalizedName}
                         >
                             Create New Game
                         </button>
@@ -100,8 +112,8 @@ export default function Lobby({
 
                         <button
                             className="btn btn-secondary"
-                            onClick={() => name.trim() && setMode('join')}
-                            disabled={!isConnected || !name.trim()}
+                            onClick={() => normalizedName && setMode('join')}
+                            disabled={!isConnected || !normalizedName}
                         >
                             Join with Code
                         </button>
@@ -189,10 +201,23 @@ export default function Lobby({
                 <div className="panel panel-glow lobby-card">
                     <div className="lobby-header">
                         <h2>Join Game</h2>
-                        <p className="lobby-subtitle">as {name}</p>
+                        <p className="lobby-subtitle">Enter your name and room code</p>
                     </div>
 
                     <form onSubmit={handleJoinRoom} className="lobby-form">
+                        <div className="input-group">
+                            <label className="input-label">Your Name</label>
+                            <input
+                                type="text"
+                                className="input"
+                                placeholder="Required to join..."
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                maxLength={20}
+                                disabled={!isConnected || isLoading}
+                            />
+                        </div>
+
                         <div className="input-group">
                             <label className="input-label">Room Code</label>
                             <input
@@ -206,12 +231,16 @@ export default function Lobby({
                             />
                         </div>
 
+                        {!normalizedName && (
+                            <div className="text-warning text-center">Name is required to join.</div>
+                        )}
+
                         {error && <div className="text-danger text-center">{error}</div>}
 
                         <button
                             type="submit"
                             className="btn btn-primary"
-                            disabled={isLoading || joinCode.length !== 6}
+                            disabled={isLoading || !canJoinRoom}
                         >
                             {isLoading ? 'Joining...' : 'Join Room'}
                         </button>
