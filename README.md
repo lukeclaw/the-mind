@@ -1,15 +1,3 @@
-# The Mind - Multiplayer Card Game
-
-A web-based multiplayer implementation of "The Mind" cooperative card game.
-
-## 🎮 How to Play
-
-1. Create a room and share the code with friends
-2. Each level, players receive N cards (Level 1 = 1 card, Level 2 = 2 cards, etc.)
-3. Play cards in ascending order **without communicating**
-4. If someone plays a card while lower cards exist → lose a life
-5. Complete all levels to win!
-
 ## 🚀 Quick Start
 
 ### Local Development
