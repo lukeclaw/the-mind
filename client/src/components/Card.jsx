@@ -44,7 +44,10 @@ export default function Card({
 
     if (!faceUp) {
         return (
-            <div className={`playing-card face-down ${compact ? 'compact' : ''}`}>
+            <div
+                className={`playing-card face-down ${compact ? 'compact' : ''} ${animateIn ? 'dealt' : ''}`}
+                style={{ animationDelay: animateIn ? `${animationDelayMs}ms` : undefined }}
+            >
                 <div className="card-back-pattern" />
                 <div className="card-back-logo">M</div>
             </div>
