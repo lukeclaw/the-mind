@@ -73,8 +73,7 @@ function createGame(players) {
         shoe: shoe,
         initialShoeSize: shoe.length,
         numDecks: numDecks,
-        initialShoeSize: shoe.length,
-        numDecks: numDecks,
+        discardPile: [],
         currentPlayerIndex: 0,
         status: 'betting', // betting, playing, dealerTurn, roundOver
         roundCount: 1,
@@ -83,11 +82,26 @@ function createGame(players) {
     };
 }
 
+function moveRoundCardsToDiscard(game) {
+    if (game.dealer?.hand?.length) {
+        game.discardPile.push(...game.dealer.hand);
+    }
+
+    game.players.forEach((p) => {
+        if (p.hand?.length) {
+            game.discardPile.push(...p.hand);
+        }
+    });
+}
+
 function dealInitialCards(game) {
+    moveRoundCardsToDiscard(game);
+
     // Check if shoe needs reshuffling (75% used = 25% remaining)
     game.message = null;
     if (game.shoe.length < (game.initialShoeSize * 0.25)) {
         game.shoe = createShoe(game.numDecks);
+        game.discardPile = [];
         game.message = "Shoe reshuffled (75% penetration reached)";
     }
 
@@ -133,11 +147,14 @@ function placeBet(game, playerId, amount) {
     const player = game.players.find(p => p.id === playerId);
     if (!player) return { success: false, error: "Player not found" };
 
-    if (amount <= 0) return { success: false, error: "Bet must be positive" };
-    if (amount > player.chips) return { success: false, error: "Not enough chips" };
+    if (!Number.isFinite(amount)) return { success: false, error: "Invalid bet" };
+    const normalizedAmount = Math.floor(amount);
+    if (normalizedAmount <= 0) return { success: false, error: "Bet must be positive" };
+    if (player.betReady) return { success: false, error: "Bet already placed" };
+    if (normalizedAmount > player.chips) return { success: false, error: "Not enough chips" };
 
-    player.chips -= amount; // Deduct immediately
-    player.currentBet = amount;
+    player.chips -= normalizedAmount; // Deduct immediately
+    player.currentBet = normalizedAmount;
     player.betReady = true;
 
     // Check if all connected players are ready
@@ -197,6 +214,8 @@ function voteNextHand(game, playerId) {
 }
 
 function prepareBettingPhase(game) {
+    moveRoundCardsToDiscard(game);
+
     game.status = 'betting';
     game.readyVotes = new Set();
     game.dealer.hand = [];
@@ -216,9 +235,17 @@ function prepareBettingPhase(game) {
 
 
 function hit(game, playerId) {
+    if (game.status !== 'playing') {
+        return { success: false, error: "Round is not in playing phase" };
+    }
+
     const player = game.players.find(p => p.id === playerId);
     if (!player || game.players[game.currentPlayerIndex].id !== playerId) {
         return { success: false, error: "Not your turn" };
+    }
+
+    if (game.shoe.length === 0) {
+        return { success: false, error: "Shoe is empty" };
     }
 
     const card = game.shoe.pop();
@@ -235,6 +262,10 @@ function hit(game, playerId) {
 }
 
 function stand(game, playerId) {
+    if (game.status !== 'playing') {
+        return { success: false, error: "Round is not in playing phase" };
+    }
+
     const player = game.players.find(p => p.id === playerId);
     if (!player || game.players[game.currentPlayerIndex].id !== playerId) {
         return { success: false, error: "Not your turn" };
@@ -352,14 +383,20 @@ function resolveRound(game) {
 }
 
 function getPlayerView(game, playerId) {
+    const dealerHand = Array.isArray(game.dealer?.hand) ? game.dealer.hand.filter(Boolean) : [];
+    const visibleDealerHand = game.dealer.hidden
+        ? (dealerHand.length >= 2 ? [dealerHand[0], { suit: '?', value: '?' }] : dealerHand)
+        : dealerHand;
+
     return {
         ...game,
         shoe: undefined, // Hide shoe
+        shoeRemaining: game.shoe.length,
+        shoeTotal: game.initialShoeSize,
+        discardCount: game.discardPile.length,
         dealer: {
             ...game.dealer,
-            hand: game.dealer.hidden
-                ? [game.dealer.hand[0], { suit: '?', value: '?' }]
-                : game.dealer.hand
+            hand: visibleDealerHand
         },
         players: game.players.map(p => ({
             ...p,
@@ -389,6 +426,7 @@ function handlePlayerDisconnect(game, playerId) {
     if (!player) return { success: false };
 
     const previousStatus = game.status;
+    const wasPlaying = game.status === 'playing' && player.status === 'playing';
     const wasCurrentTurn = game.status === 'playing' && game.players[game.currentPlayerIndex]?.id === playerId;
 
     player.connected = false;
@@ -402,11 +440,11 @@ function handlePlayerDisconnect(game, playerId) {
         player.currentBet = 0;
     }
 
-    if (game.status === 'playing' && player.status === 'playing') {
+    if (wasPlaying) {
         player.status = 'standing';
     }
 
-    if (game.status === 'playing' && (wasCurrentTurn || player.status === 'standing')) {
+    if (game.status === 'playing' && wasCurrentTurn) {
         updateTurn(game);
     }
 
