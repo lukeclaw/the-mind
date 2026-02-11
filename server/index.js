@@ -325,7 +325,6 @@ io.on('connection', (socket) => {
             });
         } else if (room.gameType === 'blackjack') {
             room.game = blackjackLogic.createGame(room.players);
-            blackjackLogic.dealInitialCards(room.game);
 
             // Send personalized game state
             room.players.forEach(player => {
@@ -418,6 +417,9 @@ io.on('connection', (socket) => {
         if (result.gameStarted) {
             // Everyone bet, cards dealt
             broadcastBlackjackUpdate(room, { action: 'deal' });
+            if (room.game.status === 'dealerTurn') {
+                startBlackjackDealerTurn(room);
+            }
         } else {
             // Bet placed
             broadcastBlackjackUpdate(room, { action: 'bet', playerId: socket.id });

@@ -56,14 +56,15 @@ export function useSocket() {
             setPlayers(prev =>
                 prev.map(p => p.id === id ? { ...p, connected: false } : p)
             );
-            if (gameState) {
-                setGameState(prev => ({
+            setGameState(prev => {
+                if (!prev) return prev;
+                return {
                     ...prev,
                     players: prev.players.map(p =>
                         p.id === id ? { ...p, connected: false } : p
                     )
-                }));
-            }
+                };
+            });
         }
 
         function onGameStarted(state) {
@@ -117,7 +118,6 @@ export function useSocket() {
         socket.on('victory', onVictory);
         socket.on('starVoteUpdate', onStarVoteUpdate);
         socket.on('throwingStarUsed', onThrowingStarUsed);
-        socket.on('throwingStarUsed', onThrowingStarUsed);
         socket.on('blackjackUpdate', onBlackjackUpdate);
         socket.on('minimalistUpdate', ({ gameState: newState }) => setGameState(newState));
 
@@ -133,11 +133,10 @@ export function useSocket() {
             socket.off('victory', onVictory);
             socket.off('starVoteUpdate', onStarVoteUpdate);
             socket.off('throwingStarUsed', onThrowingStarUsed);
-            socket.off('throwingStarUsed', onThrowingStarUsed);
             socket.off('blackjackUpdate', onBlackjackUpdate);
             socket.off('minimalistUpdate');
         };
-    }, [gameState]);
+    }, []);
 
     // Actions
     const createRoom = useCallback((name, gameType = 'the-mind') => {
@@ -242,7 +241,10 @@ export function useSocket() {
         return new Promise((resolve, reject) => {
             socket.emit('blackjackAction', { action }, (response) => {
                 if (response.success) resolve(response);
-                else reject(new Error(response.error));
+                else {
+                    setError(response.error);
+                    reject(new Error(response.error));
+                }
             });
         });
     }, []);
@@ -251,7 +253,10 @@ export function useSocket() {
         return new Promise((resolve, reject) => {
             socket.emit('blackjackPlaceBet', { amount }, (response) => {
                 if (response.success) resolve(response);
-                else reject(new Error(response.error));
+                else {
+                    setError(response.error);
+                    reject(new Error(response.error));
+                }
             });
         });
     }, []);
@@ -260,7 +265,10 @@ export function useSocket() {
         return new Promise((resolve, reject) => {
             socket.emit('blackjackBegForMoney', { message }, (response) => {
                 if (response.success) resolve(response);
-                else reject(new Error(response.error));
+                else {
+                    setError(response.error);
+                    reject(new Error(response.error));
+                }
             });
         });
     }, []);
@@ -269,7 +277,10 @@ export function useSocket() {
         return new Promise((resolve, reject) => {
             socket.emit('blackjackVoteNextHand', null, (response) => {
                 if (response.success) resolve(response);
-                else reject(new Error(response.error));
+                else {
+                    setError(response.error);
+                    reject(new Error(response.error));
+                }
             });
         });
     }, []);
