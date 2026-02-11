@@ -22,5 +22,12 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Screenshot artifacts
+artifacts/screenshots/
+
+# Playwright outputs
+test-results/
+playwright-report/
+
 # Fly.io
 .fly/
