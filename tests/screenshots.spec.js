@@ -28,22 +28,15 @@ async function joinRoomAsPlayer(browser, roomCode, playerName) {
 }
 
 async function openBetDrawer(page) {
-    const openPanel = page.locator('.blackjack-bet-dock.open .blackjack-bet-panel');
-    if (await openPanel.isVisible().catch(() => false)) {
-        return;
-    }
-
-    const betToggle = page.locator('.blackjack-bet-toggle').first();
-    await expect(betToggle).toBeVisible({ timeout: 15_000 });
-    await betToggle.click();
+    const openPanel = page.locator('.table-betting-zone');
     await expect(openPanel).toBeVisible({ timeout: 15_000 });
 }
 
 async function placeBet(page, amount) {
     await openBetDrawer(page);
-    const panel = page.locator('.blackjack-bet-dock.open .blackjack-bet-panel');
-    await panel.locator('input[type="number"]').fill(String(amount));
-    await panel.getByRole('button', { name: 'Confirm' }).click();
+    const panel = page.locator('.table-betting-zone');
+    await panel.locator('.chip-token', { hasText: String(amount) }).first().click();
+    await panel.getByRole('button', { name: `Confirm $${amount}` }).click();
 }
 
 test.describe('UI screenshot pipeline', () => {
@@ -87,9 +80,9 @@ test.describe('UI screenshot pipeline', () => {
         await expect(startGameButton).toBeEnabled({ timeout: 15_000 });
         await startGameButton.click();
 
-        await expect(page.locator('.blackjack-bet-toggle')).toBeVisible({ timeout: 15_000 });
-        await expect(playerTwo.page.locator('.blackjack-bet-toggle')).toBeVisible({ timeout: 15_000 });
-        await expect(playerThree.page.locator('.blackjack-bet-toggle')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('.table-betting-zone')).toBeVisible({ timeout: 15_000 });
+        await expect(playerTwo.page.locator('.table-betting-zone')).toBeVisible({ timeout: 15_000 });
+        await expect(playerThree.page.locator('.table-betting-zone')).toBeVisible({ timeout: 15_000 });
         await saveShot(page, '05-blackjack-table-pre-bet-host');
 
         await openBetDrawer(page);
@@ -99,8 +92,8 @@ test.describe('UI screenshot pipeline', () => {
         await placeBet(playerTwo.page, 50);
         await placeBet(playerThree.page, 25);
 
-        await expect(page.locator('.local-lane .playing-card')).toHaveCount(2, { timeout: 15_000 });
-        await expect(page.locator('.opponents-zone .playing-card')).toHaveCount(4, { timeout: 15_000 });
+        await expect(page.locator('.local-lane .playing-card.face-up')).toHaveCount(2, { timeout: 15_000 });
+        await expect(page.locator('.opponents-zone .playing-card.face-up')).toHaveCount(4, { timeout: 15_000 });
         await saveShot(page, '07-blackjack-multiplayer-cards-host');
 
         await saveShot(playerTwo.page, '08-blackjack-multiplayer-cards-player2');
@@ -127,16 +120,30 @@ test.describe('UI screenshot pipeline', () => {
         await expect(page.getByText('Game Lobby')).toBeVisible({ timeout: 15_000 });
         await page.getByRole('button', { name: /Start Game/i }).click();
 
-        await expect(page.locator('.blackjack-bet-toggle')).toBeVisible({ timeout: 15_000 });
+        await expect(page.locator('.table-betting-zone')).toBeVisible({ timeout: 15_000 });
         await placeBet(page, 100);
 
         const resultCard = page.locator('.blackjack-result-card');
         const standButton = page.getByRole('button', { name: 'STAND' });
+        const insuranceDecline = page.getByRole('button', { name: 'Decline' });
 
-        // If the hand did not auto-resolve from naturals, force progression with stand.
-        if (!await resultCard.isVisible().catch(() => false)) {
-            await expect(standButton).toBeEnabled({ timeout: 15_000 });
-            await standButton.click();
+        // Drive the round to completion across variable states (insurance / turn / auto-resolve).
+        for (let i = 0; i < 30; i += 1) {
+            if (await resultCard.isVisible().catch(() => false)) break;
+
+            if (await insuranceDecline.isVisible().catch(() => false)) {
+                await insuranceDecline.click();
+                await page.waitForTimeout(250);
+                continue;
+            }
+
+            if (await standButton.isEnabled().catch(() => false)) {
+                await standButton.click();
+                await page.waitForTimeout(250);
+                continue;
+            }
+
+            await page.waitForTimeout(400);
         }
 
         await expect(resultCard).toBeVisible({ timeout: 25_000 });
