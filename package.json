@@ -2,7 +2,12 @@
     "name": "the-mind-root",
     "private": true,
     "scripts": {
-        "start": "cd server && npm install && npm start"
+        "start": "cd server && npm install && npm start",
+        "screenshots": "playwright test tests/screenshots.spec.js",
+        "screenshots:headed": "playwright test tests/screenshots.spec.js --headed"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.56.1"
     },
     "engines": {
         "node": "20.x"
