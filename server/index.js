@@ -367,7 +367,7 @@ io.on('connection', (socket) => {
 
     // ================= BLACKJACK EVENTS =================
 
-    socket.on('blackjackAction', ({ action }, callback) => {
+    socket.on('blackjackAction', ({ action, amount }, callback) => {
         const room = getRoom(currentRoom);
         if (!room || !room.game || room.gameType !== 'blackjack') return callback({ success: false, error: 'Invalid game' });
 
@@ -376,6 +376,14 @@ io.on('connection', (socket) => {
             result = blackjackLogic.hit(room.game, socket.id);
         } else if (action === 'stand') {
             result = blackjackLogic.stand(room.game, socket.id);
+        } else if (action === 'double') {
+            result = blackjackLogic.doubleDown(room.game, socket.id);
+        } else if (action === 'split') {
+            result = blackjackLogic.split(room.game, socket.id);
+        } else if (action === 'surrender') {
+            result = blackjackLogic.surrender(room.game, socket.id);
+        } else if (action === 'insurance') {
+            result = blackjackLogic.insurance(room.game, socket.id, amount);
         } else {
             return callback({ success: false, error: 'Invalid action' });
         }
@@ -385,9 +393,12 @@ io.on('connection', (socket) => {
         // Broadcast update for the player's action
         broadcastBlackjackUpdate(room, { playerId: socket.id, action });
 
-        // If turn passed to dealer, start the show
+        // If turn passed to dealer, start dealer sequence.
         if (room.game.status === 'dealerTurn') {
             startBlackjackDealerTurn(room);
+        } else if (room.game.status === 'roundOver') {
+            // Insurance dealer blackjack or immediate terminal states.
+            broadcastBlackjackUpdate(room, { action: 'roundOver' });
         }
 
         callback({ success: true });

@@ -237,9 +237,9 @@ export function useSocket() {
         });
     }, []);
 
-    const blackjackAction = useCallback((action) => {
+    const blackjackAction = useCallback((action, payload = {}) => {
         return new Promise((resolve, reject) => {
-            socket.emit('blackjackAction', { action }, (response) => {
+            socket.emit('blackjackAction', { action, ...payload }, (response) => {
                 if (response.success) resolve(response);
                 else {
                     setError(response.error);
