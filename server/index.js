@@ -11,6 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const gameLogic = require('./gameLogic');
 const blackjackLogic = require('./blackjackLogic');
 const minimalistLogic = require('./minimalistLogic');
+const estimatorEngine = require('./estimatorEngine');
 
 const app = express();
 const server = http.createServer(app);
@@ -44,6 +45,56 @@ app.get('/health', (_, res) => {
 
 // Store active rooms
 const rooms = new Map();
+const calibrationRuns = [];
+
+function safeNumber(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function sanitizeEstimatorRequest(body) {
+    const payload = body || {};
+    const workload = payload.workload || {};
+
+    return {
+        ...payload,
+        model_id: typeof payload.model_id === 'string' ? payload.model_id : undefined,
+        runtime_id: typeof payload.runtime_id === 'string' ? payload.runtime_id : undefined,
+        quant_id: typeof payload.quant_id === 'string' ? payload.quant_id : undefined,
+        objective: typeof payload.objective === 'string' ? payload.objective : undefined,
+        contextLength: safeNumber(payload.contextLength, undefined),
+        concurrentUsers: safeNumber(payload.concurrentUsers, undefined),
+        kvCacheBytes: safeNumber(payload.kvCacheBytes, undefined),
+        gpuCount: safeNumber(payload.gpuCount, undefined),
+        vramPerGpuGb: safeNumber(payload.vramPerGpuGb, undefined),
+        gpuMemoryBandwidth: safeNumber(payload.gpuMemoryBandwidth, undefined),
+        gpuFp16Tflops: safeNumber(payload.gpuFp16Tflops, undefined),
+        cpuCores: safeNumber(payload.cpuCores, undefined),
+        cpuMemoryBandwidth: safeNumber(payload.cpuMemoryBandwidth, undefined),
+        systemRamGb: safeNumber(payload.systemRamGb, undefined),
+        pcieGen: safeNumber(payload.pcieGen, undefined),
+        pcieLanes: safeNumber(payload.pcieLanes, undefined),
+        nvlinkBandwidth: safeNumber(payload.nvlinkBandwidth, undefined),
+        efficiencyTarget: safeNumber(payload.efficiencyTarget, undefined),
+        workload: {
+            context_tokens: safeNumber(workload.context_tokens, undefined),
+            output_tokens: safeNumber(workload.output_tokens, undefined),
+            concurrency: safeNumber(workload.concurrency, undefined)
+        }
+    };
+}
+
+function validateCalibrationPayload(payload) {
+    if (!payload || typeof payload !== 'object') return 'Payload must be an object.';
+    if (payload.model_id && typeof payload.model_id !== 'string') return 'model_id must be a string.';
+    if (payload.runtime_id && typeof payload.runtime_id !== 'string') return 'runtime_id must be a string.';
+    if (payload.quant_id && typeof payload.quant_id !== 'string') return 'quant_id must be a string.';
+
+    const serialized = JSON.stringify(payload);
+    if (serialized.length > 1024 * 1024) return 'Calibration payload exceeds 1MB limit.';
+
+    return null;
+}
 
 /**
  * Generate a short room code
@@ -91,6 +142,115 @@ app.get('/api/room/:code', (req, res) => {
         maxPlayers: 4,
         gameType: room.gameType || 'the-mind',
         status: room.game ? room.game.status : 'lobby'
+    });
+});
+
+// ================= ESTIMATOR V2 API =================
+
+app.get('/api/estimator/v1/catalog/models', (_, res) => {
+    res.json({ items: estimatorEngine.MODEL_CATALOG });
+});
+
+app.get('/api/estimator/v1/catalog/runtimes', (_, res) => {
+    res.json({ items: estimatorEngine.RUNTIME_CATALOG });
+});
+
+app.get('/api/estimator/v1/catalog/quantizations', (_, res) => {
+    res.json({ items: estimatorEngine.QUANT_CATALOG });
+});
+
+app.get('/api/estimator/v1/catalog/hardware-profiles', (_, res) => {
+    const items = Object.entries(estimatorEngine.GPU_PRESETS).map(([id, spec]) => ({
+        id,
+        label: id,
+        spec
+    }));
+    res.json({ items });
+});
+
+app.post('/api/estimator/v1/estimate', (req, res) => {
+    try {
+        const sanitized = sanitizeEstimatorRequest(req.body);
+        const inputs = estimatorEngine.mergeEstimateInputs(sanitized);
+        const scenario = estimatorEngine.estimateScenario(inputs.modelId, inputs);
+        const envelope = estimatorEngine.estimateModelEnvelope(inputs);
+        const recommendations = estimatorEngine.recommendConfigs(inputs);
+        const minimumBuild = estimatorEngine.recommendMinimumBuild(inputs);
+
+        const bottlenecks = scenario.bottlenecks.map((code) => ({
+            code,
+            label: estimatorEngine.bottleneckLabel(code)
+        }));
+
+        const explanations = [];
+        if (scenario.feasibilityCode === 'with_offload') {
+            explanations.push(`Model exceeds pure VRAM envelope by ${scenario.memory.offloadGb.toFixed(1)} GB, causing host offload.`);
+        }
+        if (bottlenecks.some((item) => item.code === 'pcie_bandwidth')) {
+            explanations.push('PCIe throughput limits sustained decode under current concurrency.');
+        }
+        if (explanations.length === 0) {
+            explanations.push('Current estimate is memory-path efficient for the selected scenario.');
+        }
+
+        res.json({
+            feasibility: scenario.feasibilityCode,
+            feasibilityLabel: estimatorEngine.feasibilityLabel(scenario.feasibilityCode),
+            estimates: {
+                decode_toks_sec: scenario.throughput.decode,
+                prefill_toks_sec: scenario.throughput.prefill,
+                ttft_ms: scenario.latency.ttftMs,
+                memory_gb: scenario.memory
+            },
+            bottlenecks,
+            recommended_configs: recommendations,
+            minimum_build: minimumBuild,
+            envelope: envelope.map((row) => ({
+                model_id: row.model.id,
+                model: row.model.label,
+                feasibility: row.feasibilityCode,
+                decode_p50: row.throughput.decode.p50,
+                memory_p50: row.memory.p50
+            })),
+            diagnostics: scenario.diagnostics,
+            explanations
+        });
+    } catch (error) {
+        console.error('Estimator error:', error);
+        res.status(400).json({ error: 'Failed to estimate scenario', details: error.message });
+    }
+});
+
+app.post('/api/estimator/v1/calibrate', (req, res) => {
+    const payload = req.body || {};
+    const validationError = validateCalibrationPayload(payload);
+    if (validationError) {
+        return res.status(400).json({ error: validationError });
+    }
+
+    const run = {
+        id: uuidv4(),
+        receivedAt: new Date().toISOString(),
+        payload
+    };
+
+    calibrationRuns.push(run);
+    if (calibrationRuns.length > 2000) calibrationRuns.shift();
+
+    res.status(202).json({
+        success: true,
+        calibration_run_id: run.id,
+        queue_size: calibrationRuns.length
+    });
+});
+
+app.get('/api/estimator/v1/calibrate', (_, res) => {
+    res.json({
+        queue_size: calibrationRuns.length,
+        latest: calibrationRuns.slice(-10).map((run) => ({
+            id: run.id,
+            receivedAt: run.receivedAt
+        }))
     });
 });
 
