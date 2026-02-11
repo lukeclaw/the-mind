@@ -2,8 +2,7 @@
     "name": "the-mind-root",
     "private": true,
     "scripts": {
-        "start": "cd server && npm install && npm start",
-        "lint:staged": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precommit-lint.ps1"
+        "start": "cd server && npm install && npm start"
     },
     "engines": {
         "node": "20.x"
